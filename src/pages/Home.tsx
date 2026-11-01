@@ -33,9 +33,22 @@ const ContentSidebarLayout = styled.div`
   gap: 2rem;
   width: 100%;
 
+  min-width: 0;
+
+  & > div {
+    min-width: 0;
+  }
   @media (min-width: 1000px) {
     flex-direction: row;
     justify-content: space-between;
+    & > div:last-child {
+      flex: 0 0 22rem;
+    }
+  }
+  @media (min-width: 1500px) {
+    & > div:last-child {
+      flex-basis: 26rem;
+    }
   }
 `;
 
@@ -50,8 +63,9 @@ const TabContainer = styled.div`
 
 const Tab = styled.div<{ $isActive: boolean }>`
   background: ${({ $isActive }) =>
-    $isActive ? 'var(--primary-accent)' : 'transparent'};
-  border-radius: var(--global-border-radius);
+    $isActive ? 'var(--primary-accent)' : 'var(--global-secondary-bg)'};
+  color: ${({ $isActive }) => ($isActive ? '#fff' : 'var(--global-text)')};
+  border-radius: 999px;
   border: none;
   cursor: pointer;
   font-weight: bold;
@@ -60,7 +74,7 @@ const Tab = styled.div<{ $isActive: boolean }>`
   overflow: hidden;
   margin: 0;
   font-size: 0.8rem;
-  padding: 1rem;
+  padding: 0.7rem 1.4rem;
 
   transition: background-color 0.3s ease;
 
@@ -70,8 +84,14 @@ const Tab = styled.div<{ $isActive: boolean }>`
     background: var(--primary-accent);
   }
 
+  &:hover,
+  &:active,
+  &:focus {
+    color: #fff;
+  }
+
   @media (max-width: 500px) {
-    padding: 0.5rem;
+    padding: 0.55rem 1rem;
   }
 `;
 
@@ -83,9 +103,9 @@ const Section = styled.section`
 const ErrorMessage = styled.div`
   padding: 1rem;
   margin: 1rem 0;
-  background-color: #ffdddd;
+  background-color: rgba(244, 67, 54, 0.12);
   border-left: 4px solid #f44336;
-  color: #f44336;
+  color: #ff6b5e;
   border-radius: var(--global-border-radius);
 
   p {

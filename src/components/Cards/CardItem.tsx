@@ -261,7 +261,7 @@ const CardItemContent: React.FC<{ anime: Anime }> = ({ anime }) => {
         <SkeletonCard />
       ) : (
         <StyledCardWrapper
-          to={`/watch/${anime.id}`}
+          to={`/anime/${anime.id}`}
           onMouseEnter={handleMouseEnter}
           onMouseLeave={handleMouseLeave}
           color={animeColor}

@@ -5,7 +5,7 @@
 // production origins).
 
 const DEFAULT_ALLOWED_HOSTS = [
-  'public-miruro-consumet-api.vercel.app',
+  'anibiartv-api.vercel.app', // Anivexa streaming API
   'api.aniskip.com',
 ];
 
@@ -20,7 +20,7 @@ function hostOf(value: string | undefined): string | null {
 
 function allowedHosts(): Set<string> {
   const hosts = new Set(DEFAULT_ALLOWED_HOSTS);
-  for (const v of [process.env.VITE_BACKEND_URL, process.env.VITE_SKIP_TIMES]) {
+  for (const v of [process.env.VITE_STREAM_API, process.env.VITE_SKIP_TIMES]) {
     const h = hostOf(v);
     if (h) hosts.add(h);
   }

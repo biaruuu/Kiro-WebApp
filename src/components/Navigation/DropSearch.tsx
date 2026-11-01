@@ -180,7 +180,7 @@ export const DropDownSearch: React.FC<Props> = ({
         e.preventDefault();
         if (selectedIndex < total) {
           onClose();
-          navigate(`/watch/${searchResults[selectedIndex].id}`);
+          navigate(`/anime/${searchResults[selectedIndex].id}`);
         } else {
           navigate(`/search?query=${encodeURIComponent(searchQuery)}`);
           onClose();
@@ -208,7 +208,7 @@ export const DropDownSearch: React.FC<Props> = ({
           $isSelected={index === selectedIndex}
           onClick={() => {
             onClose();
-            navigate(`/watch/${result.id}`);
+            navigate(`/anime/${result.id}`);
           }}
           role='listitem'
         >

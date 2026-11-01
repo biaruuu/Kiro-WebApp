@@ -375,7 +375,7 @@ export const Navbar = () => {
       if (selectedIndex !== null && searchResults[selectedIndex]) {
         // Navigate to the selected search result if it exists
         const animeId = searchResults[selectedIndex].id;
-        navigate(`/watch/${animeId}`);
+        navigate(`/anime/${animeId}`);
         handleCloseDropdown();
       } else {
         // Fallback to navigating with the search query if the selected index is not in searchResults

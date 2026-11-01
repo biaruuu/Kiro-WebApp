@@ -141,7 +141,7 @@ export const HomeSideBar: React.FC<{ animeData: Anime[] }> = ({
     <SidebarStyled>
       {displayedAnime.map((anime: Anime, index) => (
         <Link
-          to={`/watch/${anime.id}`}
+          to={`/anime/${anime.id}`}
           key={anime.id}
           style={{ textDecoration: 'none', color: 'inherit' }}
           title={`${anime.title.userPreferred}`}

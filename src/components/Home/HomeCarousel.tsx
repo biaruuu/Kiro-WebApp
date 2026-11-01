@@ -1,6 +1,6 @@
 import { FC } from 'react';
 import styled, { keyframes } from 'styled-components';
-import { FaPlay } from 'react-icons/fa';
+import { FaPlay, FaInfoCircle } from 'react-icons/fa';
 import { Swiper, SwiperSlide } from 'swiper/react';
 import 'swiper/swiper-bundle.css';
 import { useNavigate } from 'react-router-dom';
@@ -96,6 +96,11 @@ const SlideContent = styled.div`
   @media (max-width: 1000px) {
     left: 1rem;
     bottom: 1.5rem;
+    max-width: 62%;
+  }
+  @media (max-width: 500px) {
+    max-width: calc(100% - 5.5rem);
+    bottom: 1rem;
   }
 `;
 
@@ -171,10 +176,16 @@ const PlayButtonWrapper = styled.div`
   display: flex;
   align-items: center; /* Center vertically */
   justify-content: center; /* Center horizontally */
+  gap: 0.6rem;
 
   @media (max-width: 1000px) {
     right: 1.5rem;
     bottom: 1.5rem;
+  }
+  @media (max-width: 500px) {
+    right: 1rem;
+    bottom: 1rem;
+    flex-direction: column-reverse;
   }
 `;
 
@@ -209,6 +220,23 @@ const PlayButton = styled.button`
     font-size: 1.25rem; /* Adjusted font size for small devices */
     span {
       display: none;
+    }
+  }
+`;
+
+const DetailsButton = styled(PlayButton)`
+  background-color: rgba(20, 20, 24, 0.7);
+  color: #fff;
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+
+  svg {
+    margin-right: 0.5rem;
+  }
+  @media (max-width: 500px) {
+    padding: 1.1rem;
+    svg {
+      margin: 0;
     }
   }
 `;
@@ -249,6 +277,9 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({
   const handlePlayButtonClick = (id: string) => {
     navigate(`/watch/${id}`);
   };
+  const handleDetailsClick = (id: string) => {
+    navigate(`/anime/${id}`);
+  };
 
   const truncateTitle = (title: string, maxLength: number = 40): string => {
     return title.length > maxLength
@@ -256,13 +287,12 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({
       : title;
   };
 
-  const validData = data.filter(
-    (item) =>
-      item.title &&
-      item.title.english &&
-      item.description &&
-      item.cover !== item.image,
+  const withText = data.filter(
+    (item) => item.title && (item.title.english || item.title.romaji) && item.description,
   );
+  // Prefer slides that have a real banner; fall back to posters if none do.
+  const withBanner = withText.filter((item) => item.cover !== item.image);
+  const validData = (withBanner.length ? withBanner : withText).slice(0, 10);
   const formatGenres = (genres: string[]): string => genres.join(', ');
   return (
     <>
@@ -320,7 +350,7 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({
                     />
                     <ContentWrapper>
                       <SlideContent>
-                        <SlideTitle>{truncateTitle(title.english)}</SlideTitle>
+                        <SlideTitle>{truncateTitle(title.english || title.romaji)}</SlideTitle>
                         <SlideInfo>
                           {type && (
                             <>
@@ -354,6 +384,14 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({
                           <PlayIcon />
                           <span>WATCH NOW</span>
                         </PlayButton>
+                        <DetailsButton
+                          onClick={() => handleDetailsClick(id)}
+                          title={'Details about ' + (title.english || title.romaji)}
+                          aria-label='Details'
+                        >
+                          <FaInfoCircle />
+                          <span>DETAILS</span>
+                        </DetailsButton>
                       </PlayButtonWrapper>
                     </ContentWrapper>
                     <DarkOverlay />

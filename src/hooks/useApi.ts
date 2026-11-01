@@ -1,60 +1,14 @@
-import axios from 'axios';
 import {
   anilistRequest,
-  buildEpisodes,
   DETAIL_QUERY,
-  EPISODES_QUERY,
   mapMedia,
   mapPage,
   PAGE_QUERY,
 } from './anilist';
 
-// ---------------------------------------------------------------------------
-// Configuration
-// ---------------------------------------------------------------------------
 // Catalog, search and anime details come straight from AniList (see
-// ./anilist.ts) - no backend needed.
-//
-// VITE_BACKEND_URL is OPTIONAL and only used for what AniList cannot provide:
-// episode streaming sources. Point it at a Consumet-compatible API
-// (https://github.com/consumet/api.consumet.org). The old shared host
-// public-miruro-consumet-api.vercel.app is down, so it is ignored.
-
-function ensureUrlEndsWithSlash(url: string): string {
-  return url.endsWith('/') ? url : `${url}/`;
-}
-
-const DEAD_BACKENDS = ['public-miruro-consumet-api.vercel.app'];
-const rawBackend = (
-  import.meta.env.VITE_BACKEND_URL as string | undefined
-)?.trim();
-const BACKEND_URL =
-  rawBackend && !DEAD_BACKENDS.some((h) => rawBackend.includes(h))
-    ? ensureUrlEndsWithSlash(rawBackend)
-    : '';
-
-const SKIP_TIMES = ensureUrlEndsWithSlash(
-  (import.meta.env.VITE_SKIP_TIMES as string | undefined)?.trim() ||
-    'https://api.aniskip.com/',
-);
-
-// Same-origin JSON proxy (api/json.ts) used for the optional backend and
-// aniskip. A custom VITE_PROXY_URL is honoured except the legacy corsproxy.io
-// value, which has no /api/json endpoint and rejects production origins.
-const configuredProxy = (
-  import.meta.env.VITE_PROXY_URL as string | undefined
-)?.trim();
-const PROXY_URL = ensureUrlEndsWithSlash(
-  configuredProxy && !configuredProxy.includes('corsproxy.io')
-    ? configuredProxy
-    : window.location.origin,
-);
-const PROXY_SERVER_BASE_URL = `${PROXY_URL}api/json`;
-
-const axiosInstance = axios.create({
-  baseURL: PROXY_SERVER_BASE_URL,
-  timeout: 10000,
-});
+// ./anilist.ts). Episode lists and video sources come from the Anivexa
+// streaming API (see ./anivexa.ts).
 
 // ---------------------------------------------------------------------------
 // Errors
@@ -185,48 +139,6 @@ interface FetchOptions {
 
 const listCache = createCache('AniListPages');
 const detailCache = createCache('AniListDetail');
-const episodesCache = createCache('AniListEpisodes');
-const backendCache = createCache('BackendData');
-const skipTimesCache = createCache('SkipTimes');
-
-// ---------------------------------------------------------------------------
-// Backend (optional) via proxy
-// ---------------------------------------------------------------------------
-async function fetchFromProxy(url: string, cache: any, cacheKey: string) {
-  try {
-    const cachedResponse = cache.get(cacheKey);
-    if (cachedResponse) return cachedResponse;
-
-    const response = await axiosInstance.get('', { params: { url } });
-
-    if (
-      response.status !== 200 ||
-      (response.data.statusCode && response.data.statusCode >= 400)
-    ) {
-      const errorMessage = response.data.message || 'Unknown server error';
-      throw new Error(
-        `Server error: ${
-          response.data.statusCode || response.status
-        } ${errorMessage}`,
-      );
-    }
-
-    cache.set(cacheKey, response.data);
-    return response.data;
-  } catch (error) {
-    handleError(error, 'data');
-    throw error;
-  }
-}
-
-function requireBackend(feature: string): string {
-  if (!BACKEND_URL) {
-    throw new Error(
-      `${feature} needs a streaming backend. Set VITE_BACKEND_URL to a Consumet-compatible API.`,
-    );
-  }
-  return BACKEND_URL;
-}
 
 // ---------------------------------------------------------------------------
 // AniList-backed catalog
@@ -325,90 +237,3 @@ export async function fetchRecentEpisodes(
   });
 }
 
-// ---------------------------------------------------------------------------
-// Episodes & streaming
-// ---------------------------------------------------------------------------
-// Episode list: built from AniList data ("<slug>-episode-<n>"). If a
-// Consumet backend is configured it is tried first so its ids line up with
-// its own streaming endpoints.
-export async function fetchAnimeEpisodes(
-  animeId: string,
-  provider: string = 'gogoanime',
-  dub: boolean = false,
-) {
-  if (BACKEND_URL) {
-    try {
-      const params = new URLSearchParams({
-        provider,
-        dub: dub ? 'true' : 'false',
-      });
-      const url = `${BACKEND_URL}meta/anilist/episodes/${animeId}?${params.toString()}`;
-      const data = await fetchFromProxy(
-        url,
-        backendCache,
-        generateCacheKey(
-          'animeEpisodes',
-          animeId,
-          provider,
-          dub ? 'dub' : 'sub',
-        ),
-      );
-      if (Array.isArray(data) && data.length > 0) return data;
-    } catch {
-      // fall through to the AniList-built list
-    }
-  }
-  return cachedAniList(
-    episodesCache,
-    generateCacheKey('episodes', animeId),
-    EPISODES_QUERY,
-    { id: Number(animeId) },
-    (data) => buildEpisodes(data.Media),
-  );
-}
-
-export async function fetchAnimeEmbeddedEpisodes(episodeId: string) {
-  const base = requireBackend('Streaming');
-  return fetchFromProxy(
-    `${base}meta/anilist/servers/${episodeId}`,
-    backendCache,
-    generateCacheKey('animeEmbeddedServers', episodeId),
-  );
-}
-
-export async function fetchAnimeStreamingLinks(episodeId: string) {
-  const base = requireBackend('Streaming');
-  return fetchFromProxy(
-    `${base}meta/anilist/watch/${episodeId}`,
-    backendCache,
-    generateCacheKey('animeStreamingLinks', episodeId),
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Skip times (aniskip)
-// ---------------------------------------------------------------------------
-interface FetchSkipTimesParams {
-  malId: string;
-  episodeNumber: string;
-  episodeLength?: string;
-}
-
-export async function fetchSkipTimes({
-  malId,
-  episodeNumber,
-  episodeLength = '0',
-}: FetchSkipTimesParams) {
-  const types = ['ed', 'mixed-ed', 'mixed-op', 'op', 'recap'];
-  const url = new URL(`${SKIP_TIMES}v2/skip-times/${malId}/${episodeNumber}`);
-  url.searchParams.append('episodeLength', episodeLength.toString());
-  types.forEach((type) => url.searchParams.append('types[]', type));
-
-  const cacheKey = generateCacheKey(
-    'skipTimes',
-    malId,
-    episodeNumber,
-    episodeLength || '',
-  );
-  return fetchFromProxy(url.toString(), skipTimesCache, cacheKey);
-}

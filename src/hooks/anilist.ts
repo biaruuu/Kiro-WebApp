@@ -54,16 +54,6 @@ export const DETAIL_QUERY = `
   query ($id: Int) { Media(id: $id, type: ANIME) { ${DETAIL_FIELDS} } }
 `;
 
-export const EPISODES_QUERY = `
-  query ($id: Int) {
-    Media(id: $id, type: ANIME) {
-      id ${TITLE} episodes status ${COVER} bannerImage
-      nextAiringEpisode { airingAt timeUntilAiring episode }
-      streamingEpisodes { title thumbnail }
-    }
-  }
-`;
-
 export async function anilistRequest<T = any>(
   query: string,
   variables: Record<string, unknown>,
@@ -210,44 +200,4 @@ export function mapPage(data: any) {
     totalResults: page.pageInfo.total,
     results: page.media.map(mapMedia),
   };
-}
-
-export const slugify = (s: string) =>
-  s
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '') || 'anime';
-
-// Build a Consumet-style episode list ("<slug>-episode-<n>") from AniList data.
-export function buildEpisodes(media: any) {
-  const title: string =
-    media.title?.romaji || media.title?.english || media.title?.native || '';
-  const slug = slugify(title);
-  const next = media.nextAiringEpisode;
-  const streaming: any[] = media.streamingEpisodes ?? [];
-
-  const byNumber = new Map<number, { title: string; thumbnail: string }>();
-  streaming.forEach((s) => {
-    const m = /episode\s+(\d+)\s*[-:–]?\s*(.*)/i.exec(s.title ?? '');
-    if (m) byNumber.set(Number(m[1]), { title: m[2] || '', thumbnail: s.thumbnail });
-  });
-
-  let count: number = media.episodes ?? 0;
-  if (next) count = next.episode - 1;
-  else if (!count) count = streaming.length;
-
-  const fallbackImage = media.bannerImage ?? media.coverImage?.extraLarge ?? '';
-  return Array.from({ length: Math.max(count, 0) }, (_, i) => {
-    const n = i + 1;
-    const s = byNumber.get(n);
-    return {
-      id: `${slug}-episode-${n}`,
-      number: n,
-      title: s?.title || `Episode ${n}`,
-      description: null,
-      image: s?.thumbnail || fallbackImage,
-      imageHash: '',
-      airDate: null,
-    };
-  });
 }

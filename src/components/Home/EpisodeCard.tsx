@@ -265,7 +265,7 @@ export const EpisodeCard: React.FC = () => {
         return (
           <StyledSwiperSlide key={episode.id}>
             <AnimeEpisodeCard
-              to={`/watch/${animeId}`}
+              to={`/watch/${animeId}?ep=${episode.number}`}
               style={{ textDecoration: 'none' }}
               title={`Continue Watching ${displayTitle}`}
             >

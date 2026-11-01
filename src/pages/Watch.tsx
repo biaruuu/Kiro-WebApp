@@ -1,820 +1,739 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { FaBell } from 'react-icons/fa';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import styled from 'styled-components';
-import Image404URL from '/src/assets/404.webp';
 import {
-  EpisodeList,
-  Player,
-  EmbedPlayer,
-  WatchAnimeData as AnimeData,
-  AnimeDataList,
-  MediaSource,
-  fetchAnimeEmbeddedEpisodes,
-  fetchAnimeEpisodes,
-  fetchAnimeData,
-  fetchAnimeInfo,
-  SkeletonPlayer,
-} from '../index';
-import { Episode } from '../index';
+  FaStepBackward,
+  FaStepForward,
+  FaStar,
+  FaInfoCircle,
+  FaDownload,
+} from 'react-icons/fa';
+import StreamPlayer from '../components/Watch/Video/StreamPlayer';
+import EpisodePanel from '../components/Watch/EpisodePanel';
+import Shelf, { toShelfItems } from '../components/Details/Shelf';
+import { fetchAnimeData } from '../hooks/useApi';
+import {
+  fetchProviderEpisodes,
+  fetchWatch,
+  providerLabel,
+  type Audio,
+  type ProviderEpisodes,
+  type StreamEpisode,
+  type WatchData,
+} from '../hooks/anivexa';
+import {
+  getLastWatchedNumber,
+  getProgress,
+  getWatchedNumbers,
+  markWatched,
+  readFlag,
+  saveProgress,
+  writeFlag,
+} from '../hooks/watchStorage';
+import type { Anime } from '../hooks/interface';
 
-const WatchContainer = styled.div``;
-
-const WatchWrapper = styled.div`
-  font-size: 0.9rem;
-  gap: 1rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background-color: var(--global-primary-bg);
-  color: var(--global-text);
-
-  @media (min-width: 1000px) {
-    flex-direction: row;
-    align-items: flex-start;
-  }
-`;
-
-const DataWrapper = styled.div`
+// ---------------------------------------------------------------------------
+// Styles
+// ---------------------------------------------------------------------------
+const Page = styled.div`
   display: grid;
-  gap: 1rem;
-  grid-template-columns: 1fr 1fr; // Aim for a 3:1 ratio
-  width: 100%; // Make sure this container can expand enough
+  grid-template-columns: minmax(0, 1fr) 24rem;
+  gap: 1.25rem;
+  align-items: start;
+  max-width: 120rem;
+  margin: 0 auto;
+
+  @media (max-width: 1200px) {
+    grid-template-columns: minmax(0, 1fr) 21rem;
+  }
   @media (max-width: 1000px) {
-    grid-template-columns: auto;
+    grid-template-columns: minmax(0, 1fr);
   }
 `;
 
-const SourceAndData = styled.div<{ $videoPlayerWidth: string }>`
-  width: ${({ $videoPlayerWidth }) => $videoPlayerWidth};
+const Main = styled.div`
+  min-width: 0;
 `;
 
-const RalationsTable = styled.div`
-  padding: 0;
-  margin-top: 1rem;
-  @media (max-width: 1000px) {
-    margin-top: 0rem;
+const Side = styled.div`
+  min-width: 0;
+  @media (min-width: 1001px) {
+    position: sticky;
+    top: 4.5rem;
   }
 `;
-const VideoPlayerContainer = styled.div`
-  position: relative;
-  width: 100%;
+
+const NowPlaying = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin: 0.9rem 0 0.4rem;
+
+  h1 {
+    margin: 0;
+    font-size: 1.1rem;
+    line-height: 1.3;
+  }
+  p {
+    margin: 0.2rem 0 0;
+    font-size: 0.85rem;
+    color: var(--global-text-muted);
+  }
+
+  @media (max-width: 600px) {
+    h1 {
+      font-size: 1rem;
+    }
+  }
+`;
+
+const NavButtons = styled.div`
+  display: flex;
+  gap: 0.4rem;
+  flex: none;
+`;
+
+const Btn = styled.button<{ $primary?: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.9rem;
+  border: 1px solid var(--global-border);
   border-radius: var(--global-border-radius);
+  background: ${({ $primary }) =>
+    $primary ? 'var(--primary-accent)' : 'var(--global-button-bg)'};
+  color: ${({ $primary }) => ($primary ? '#fff' : 'var(--global-text)')};
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: background-color 0.2s ease;
 
-  @media (min-width: 1000px) {
-    flex: 1 1 auto;
+  &:hover:not(:disabled) {
+    background: var(--primary-accent);
+    color: #fff;
+  }
+  &:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  @media (max-width: 500px) {
+    padding: 0.5rem 0.65rem;
+    span {
+      display: none;
+    }
   }
 `;
 
-const EpisodeListContainer = styled.div`
-  width: 100%;
-  max-height: 100%;
+const Controls = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem 1.25rem;
+  margin-top: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--global-secondary-bg);
+  border: 1px solid var(--global-border);
+  border-radius: calc(var(--global-border-radius) * 2);
+`;
 
-  @media (min-width: 1000px) {
-    flex: 1 1 500px;
-    max-height: 100%;
-  }
+const Group = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  color: var(--global-text-muted);
+`;
 
-  @media (max-width: 1000px) {
-    padding-left: 0rem;
+const Segment = styled.div`
+  display: inline-flex;
+  padding: 0.2rem;
+  border-radius: 999px;
+  background: var(--global-primary-bg);
+  border: 1px solid var(--global-border);
+`;
+
+const SegBtn = styled.button<{ $active: boolean }>`
+  padding: 0.35rem 0.9rem;
+  border: none;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: ${({ $active }) => ($active ? '#fff' : 'var(--global-text)')};
+  background: ${({ $active }) => ($active ? 'var(--primary-accent)' : 'transparent')};
+  &:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
   }
 `;
 
-const NoEpsFoundDiv = styled.div`
-  text-align: center;
-  margin-top: 10rem;
-  margin-bottom: 10rem;
-  @media (max-width: 1000px) {
-    margin-top: 2.5rem;
-    margin-bottom: 6rem;
+const Select = styled.select`
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--global-border-radius);
+  border: 1px solid var(--global-border);
+  background: var(--global-primary-bg);
+  color: var(--global-text);
+  font-size: 0.8rem;
+  font-weight: 600;
+`;
+
+const Toggle = styled.label`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+  color: var(--global-text);
+  user-select: none;
+
+  input {
+    accent-color: var(--primary-accent);
+    width: 1rem;
+    height: 1rem;
   }
 `;
 
-const NoEpsImage = styled.div`
-  margin-bottom: 3rem;
-  max-width: 100%;
+const Notice = styled.div<{ $tone?: 'warn' | 'error' }>`
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.9rem;
+  border-radius: var(--global-border-radius);
+  font-size: 0.85rem;
+  border: 1px solid
+    ${({ $tone }) => ($tone === 'error' ? '#f4433666' : '#d69e0066')};
+  background: ${({ $tone }) => ($tone === 'error' ? '#f4433614' : '#d69e0014')};
+  color: var(--global-text);
+`;
+
+const InfoCard = styled.section`
+  display: grid;
+  grid-template-columns: 9rem minmax(0, 1fr);
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+  padding: 1rem;
+  background: var(--global-secondary-bg);
+  border: 1px solid var(--global-border);
+  border-radius: calc(var(--global-border-radius) * 2);
 
   img {
-    border-radius: var(--global-border-radius);
-    max-width: 100%;
-    @media (max-width: 500px) {
-      max-width: 70%;
-    }
-  }
-`;
-
-const StyledHomeButton = styled.button`
-  color: white;
-  border-radius: var(--global-border-radius);
-  border: none;
-  background-color: var(--primary-accent);
-  margin-top: 0.5rem;
-  font-weight: bold;
-  padding: 1rem;
-  position: absolute;
-  transform: translate(-50%, -50%);
-  transition: transform 0.2s ease-in-out;
-  &:hover,
-  &:active,
-  &:focus {
-    transform: translate(-50%, -50%) scale(1.05);
-  }
-  &:active {
-    transform: translate(-50%, -50%) scale(0.95);
-  }
-`;
-
-const IframeTrailer = styled.iframe`
-  position: relative;
-  border-radius: var(--global-border-radius);
-  border: none;
-  top: 0;
-  left: 0;
-  width: 70%;
-  height: 100%;
-  text-items: center;
-  @media (max-width: 1000px) {
     width: 100%;
-    height: 100%;
+    aspect-ratio: 2 / 3;
+    object-fit: cover;
+    border-radius: var(--global-border-radius);
+    background: var(--global-tertiary-bg);
+  }
+  h2 {
+    margin: 0 0 0.5rem;
+    font-size: 1.25rem;
+  }
+  .desc {
+    margin: 0.75rem 0;
+    font-size: 0.9rem;
+    line-height: 1.55;
+    color: var(--global-text);
+    opacity: 0.85;
+    display: -webkit-box;
+    -webkit-line-clamp: 5;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    white-space: pre-line;
+  }
+
+  @media (max-width: 600px) {
+    grid-template-columns: 6rem minmax(0, 1fr);
+    gap: 0.85rem;
+    h2 {
+      font-size: 1.05rem;
+    }
+    .desc {
+      -webkit-line-clamp: 4;
+      font-size: 0.82rem;
+    }
   }
 `;
 
-const LOCAL_STORAGE_KEYS = {
-  LAST_WATCHED_EPISODE: 'last-watched-',
-  WATCHED_EPISODES: 'watched-episodes-',
-  LAST_ANIME_VISITED: 'last-anime-visited',
-};
+const Chips = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+`;
 
-const useCountdown = (targetDate: number | null) => {
-  const [timeLeft, setTimeLeft] = useState('');
+const Chip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--global-tertiary-bg);
+  color: var(--global-text);
+  svg {
+    color: #f5c518;
+  }
+`;
 
-  useEffect(() => {
-    if (!targetDate) {
-      return; // Exit early if targetDate is null or undefined
+const Skeleton = styled.div<{ $h: string }>`
+  height: ${({ $h }) => $h};
+  border-radius: calc(var(--global-border-radius) * 2);
+  background: linear-gradient(
+    90deg,
+    var(--global-secondary-bg),
+    var(--global-tertiary-bg),
+    var(--global-secondary-bg)
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
     }
-
-    const timer = setInterval(() => {
-      const now = Date.now();
-      const distance = targetDate - now;
-      if (distance < 0) {
-        clearInterval(timer);
-        setTimeLeft('Airing now or aired');
-        return;
-      }
-
-      const days = Math.floor(distance / (1000 * 60 * 60 * 24));
-      const hours = Math.floor(
-        (distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
-      );
-      const minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-      const seconds = Math.floor((distance % (1000 * 60)) / 1000);
-
-      setTimeLeft(
-        `${days} days, ${hours} hours, ${minutes} minutes, ${seconds} seconds`,
-      );
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [targetDate]);
-
-  return timeLeft;
-};
-
-// Main Component
-const Watch: React.FC = () => {
-  const videoPlayerContainerRef = useRef<HTMLDivElement>(null);
-  const [videoPlayerWidth, setVideoPlayerWidth] = useState('100%');
-  const getSourceTypeKey = (animeId: string | undefined) =>
-    `source-[${animeId}]`;
-  const getLanguageKey = (animeId: string | undefined) =>
-    `subOrDub-[${animeId}]`;
-  const updateVideoPlayerWidth = useCallback(() => {
-    if (videoPlayerContainerRef.current) {
-      const width = `${videoPlayerContainerRef.current.offsetWidth}px`;
-      setVideoPlayerWidth(width);
+    100% {
+      background-position: -200% 0;
     }
-  }, [setVideoPlayerWidth, videoPlayerContainerRef]);
-  const [maxEpisodeListHeight, setMaxEpisodeListHeight] =
-    useState<string>('100%');
-  const { animeId, animeTitle, episodeNumber } = useParams<{
-    animeId?: string;
-    animeTitle?: string;
-    episodeNumber?: string;
-  }>();
-  const STORAGE_KEYS = {
-    SOURCE_TYPE: `source-[${animeId}]`,
-    LANGUAGE: `subOrDub-[${animeId}]`,
-  };
-  const navigate = useNavigate();
-  const [selectedBackgroundImage, setSelectedBackgroundImage] =
-    useState<string>('');
-  const [episodes, setEpisodes] = useState<Episode[]>([]);
-  const [currentEpisode, setCurrentEpisode] = useState<Episode>({
-    id: '0',
-    number: 1,
-    title: '',
-    image: '',
-    description: '',
-    imageHash: '',
-    airDate: '',
+  }
+`;
+
+const ANIME_FORMATS = ['TV', 'TV_SHORT', 'MOVIE', 'SPECIAL', 'OVA', 'ONA', 'MUSIC'];
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
+export default function Watch() {
+  const { animeId = '', episodeNumber } = useParams();
+  const [search, setSearch] = useSearchParams();
+
+  const [anime, setAnime] = useState<Anime | null>(null);
+  const [providers, setProviders] = useState<ProviderEpisodes[] | null>(null);
+  const [providersError, setProvidersError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  const [audioPref, setAudioPref] = useState<Audio>(() => {
+    const q = search.get('audio');
+    if (q === 'sub' || q === 'dub') return q;
+    try {
+      const saved = localStorage.getItem('preferred-audio');
+      if (saved === 'sub' || saved === 'dub') return saved;
+    } catch {
+      /* ignore */
+    }
+    return 'sub';
   });
-  const [animeInfo, setAnimeInfo] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [isEpisodeChanging, setIsEpisodeChanging] = useState(false);
-  const [showNoEpisodesMessage, setShowNoEpisodesMessage] = useState(false);
-  const [lastKeypressTime, setLastKeypressTime] = useState(0);
-  const [sourceType, setSourceType] = useState(
-    () => localStorage.getItem(STORAGE_KEYS.SOURCE_TYPE) || 'default',
+  const [providerPref, setProviderPref] = useState<string | null>(
+    search.get('provider'),
   );
-  const [embeddedVideoUrl, setEmbeddedVideoUrl] = useState('');
-  const [language, setLanguage] = useState(
-    () => localStorage.getItem(STORAGE_KEYS.LANGUAGE) || 'sub',
-  );
-  const [downloadLink, setDownloadLink] = useState('');
-  const nextEpisodeAiringTime =
-    animeInfo && animeInfo.nextAiringEpisode
-      ? animeInfo.nextAiringEpisode.airingTime * 1000
-      : null;
-  const nextEpisodenumber = animeInfo?.nextAiringEpisode?.episode;
-  const countdown = useCountdown(nextEpisodeAiringTime);
-  const currentEpisodeIndex = episodes.findIndex(
-    (ep) => ep.id === currentEpisode.id,
-  );
-  const [languageChanged, setLanguageChanged] = useState(false);
 
-  //----------------------------------------------MORE VARIABLES----------------------------------------------
-  const GoToHomePageButton = () => {
-    const navigate = useNavigate();
+  const [watch, setWatch] = useState<WatchData | null>(null);
+  const [watchLoading, setWatchLoading] = useState(false);
+  const [watchError, setWatchError] = useState<string | null>(null);
+  const [providerNotice, setProviderNotice] = useState<string | null>(null);
 
-    const handleClick = () => {
-      navigate('/home');
-    };
+  const [autoPlay, setAutoPlay] = useState(() => readFlag('autoPlay', true));
+  const [autoNext, setAutoNext] = useState(() => readFlag('autoNext', true));
+  const [autoSkip, setAutoSkip] = useState(() => readFlag('autoSkip', false));
 
-    return (
-      <StyledHomeButton onClick={handleClick}>Go back Home</StyledHomeButton>
-    );
-  };
-  //FETCH VIDSTREAMING VIDEO
-  const fetchVidstreamingUrl = async (episodeId: string) => {
-    try {
-      const embeddedServers = await fetchAnimeEmbeddedEpisodes(episodeId);
-      if (embeddedServers && embeddedServers.length > 0) {
-        const vidstreamingServer = embeddedServers.find(
-          (server: any) => server.name === 'Vidstreaming',
-        );
-        const selectedServer = vidstreamingServer || embeddedServers[0];
-        setEmbeddedVideoUrl(selectedServer.url);
-      }
-    } catch (error) {
-      console.error(
-        'Error fetching Vidstreaming servers for episode ID:',
-        episodeId,
-        error,
-      );
-    }
-  };
+  const [watchedTick, setWatchedTick] = useState(0);
+  const triedProviders = useRef<Set<string>>(new Set());
 
-  //FETCH GOGO VIDEO
-  const fetchEmbeddedUrl = async (episodeId: string) => {
-    try {
-      const embeddedServers = await fetchAnimeEmbeddedEpisodes(episodeId);
-      if (embeddedServers && embeddedServers.length > 0) {
-        const gogoServer = embeddedServers.find(
-          (server: any) => server.name === 'Gogo server',
-        );
-        const selectedServer = gogoServer || embeddedServers[0];
-        setEmbeddedVideoUrl(selectedServer.url);
-      }
-    } catch (error) {
-      console.error(
-        'Error fetching gogo servers for episode ID:',
-        episodeId,
-        error,
-      );
-    }
-  };
-
-  //SAVE TO LOCAL STORAGE NAVIGATED/CLICKED EPISODES
-  const updateWatchedEpisodes = (episode: Episode) => {
-    const watchedEpisodesJson = localStorage.getItem(
-      LOCAL_STORAGE_KEYS.WATCHED_EPISODES + animeId,
-    );
-    const watchedEpisodes: Episode[] = watchedEpisodesJson
-      ? JSON.parse(watchedEpisodesJson)
-      : [];
-    if (!watchedEpisodes.some((ep) => ep.id === episode.id)) {
-      watchedEpisodes.push(episode);
-      localStorage.setItem(
-        LOCAL_STORAGE_KEYS.WATCHED_EPISODES + animeId,
-        JSON.stringify(watchedEpisodes),
-      );
-    }
-  };
-
-  // UPDATES CURRENT EPISODE INFORMATION, UPDATES WATCHED EPISODES AND NAVIGATES TO NEW URL
-  const handleEpisodeSelect = useCallback(
-    async (selectedEpisode: Episode) => {
-      setIsEpisodeChanging(true);
-      const animeTitle = selectedEpisode.id.split('-episode')[0];
-      setCurrentEpisode({
-        id: selectedEpisode.id,
-        number: selectedEpisode.number,
-        image: selectedEpisode.image,
-        title: selectedEpisode.title,
-        description: selectedEpisode.description,
-        imageHash: selectedEpisode.imageHash,
-        airDate: selectedEpisode.airDate,
+  // ----- load anime details (AniList) -----
+  useEffect(() => {
+    let alive = true;
+    setAnime(null);
+    if (!animeId) return;
+    fetchAnimeData(animeId)
+      .then((a) => alive && setAnime(a as Anime))
+      .catch(() => {
+        /* the player still works without the details card */
       });
+    return () => {
+      alive = false;
+    };
+  }, [animeId]);
 
-      localStorage.setItem(
-        LOCAL_STORAGE_KEYS.LAST_WATCHED_EPISODE + animeId,
-        JSON.stringify({
-          id: selectedEpisode.id,
-          title: selectedEpisode.title,
-          number: selectedEpisode.number,
-        }),
-      );
-      updateWatchedEpisodes(selectedEpisode);
+  // ----- load episode lists from every provider -----
+  useEffect(() => {
+    let alive = true;
+    setProviders(null);
+    setProvidersError(null);
+    triedProviders.current = new Set();
+    if (!animeId) return;
+    fetchProviderEpisodes(animeId)
+      .then((p) => alive && setProviders(p))
+      .catch((e) => {
+        if (alive) {
+          setProviders([]);
+          setProvidersError(e?.message || 'Could not reach the streaming API.');
+        }
+      });
+    return () => {
+      alive = false;
+    };
+  }, [animeId, reloadKey]);
 
-      navigate(
-        `/watch/${animeId}/${encodeURI(animeTitle)}/${selectedEpisode.number}`,
-        {
-          replace: true,
-        },
-      );
-      await new Promise((resolve) => setTimeout(resolve, 100));
-      setIsEpisodeChanging(false);
-    },
-    [animeId, navigate],
+  // ----- derive audio / provider / episodes -----
+  const hasAudio = useMemo(
+    () => ({
+      sub: !!providers?.some((p) => p.sub.length),
+      dub: !!providers?.some((p) => p.dub.length),
+    }),
+    [providers],
   );
 
-  //UPDATE DOWNLOAD LINK WHEN EPISODE ID CHANGES
-  const updateDownloadLink = useCallback((link: string) => {
-    setDownloadLink(link);
-  }, []);
+  const audio: Audio =
+    providers && !hasAudio[audioPref] && hasAudio[audioPref === 'sub' ? 'dub' : 'sub']
+      ? audioPref === 'sub'
+        ? 'dub'
+        : 'sub'
+      : audioPref;
 
-  //AUTOPLAY BUTTON TOGGLE PROPS
-  const handleEpisodeEnd = async () => {
-    const nextEpisodeIndex = currentEpisodeIndex + 1;
-    if (nextEpisodeIndex >= episodes.length) {
-      console.log('No more episodes.');
+  const providerOptions = useMemo(
+    () => (providers ?? []).filter((p) => p[audio].length > 0),
+    [providers, audio],
+  );
+
+  const activeProvider =
+    providerOptions.find((p) => p.provider === providerPref) ?? providerOptions[0];
+  const episodes: StreamEpisode[] = activeProvider?.[audio] ?? [];
+
+  const requestedEp = Number(search.get('ep') ?? episodeNumber ?? 0) || 0;
+  const currentEp: StreamEpisode | undefined = useMemo(() => {
+    if (!episodes.length) return undefined;
+    const byNumber = (n?: number) => episodes.find((e) => e.number === n);
+    return (
+      byNumber(requestedEp) ||
+      byNumber(getLastWatchedNumber(animeId)) ||
+      episodes[0]
+    );
+  }, [episodes, requestedEp, animeId]);
+
+  const currentIndex = currentEp ? episodes.findIndex((e) => e.id === currentEp.id) : -1;
+
+  // ----- URL helpers -----
+  const updateParams = useCallback(
+    (patch: Record<string, string | undefined>) => {
+      const next = new URLSearchParams(search);
+      Object.entries(patch).forEach(([k, v]) => (v ? next.set(k, v) : next.delete(k)));
+      setSearch(next, { replace: true });
+    },
+    [search, setSearch],
+  );
+
+  const selectEpisode = (ep: StreamEpisode) => {
+    triedProviders.current = new Set();
+    setProviderNotice(null);
+    updateParams({ ep: String(ep.number) });
+  };
+
+  const changeAudio = (a: Audio) => {
+    setAudioPref(a);
+    try {
+      localStorage.setItem('preferred-audio', a);
+    } catch {
+      /* ignore */
+    }
+    triedProviders.current = new Set();
+    setProviderNotice(null);
+    updateParams({ audio: a, provider: undefined });
+    setProviderPref(null);
+  };
+
+  const changeProvider = (name: string) => {
+    triedProviders.current = new Set();
+    setProviderNotice(null);
+    setProviderPref(name);
+    updateParams({ provider: name });
+  };
+
+  // ----- load streams for the current episode -----
+  useEffect(() => {
+    if (!currentEp) {
+      setWatch(null);
       return;
     }
-    handleEpisodeSelect(episodes[nextEpisodeIndex]);
-  };
+    let alive = true;
+    setWatch(null);
+    setWatchError(null);
+    setWatchLoading(true);
+    fetchWatch(currentEp.id)
+      .then((d) => alive && setWatch(d))
+      .catch((e) => alive && setWatchError(e?.message || 'Failed to load streams.'))
+      .finally(() => alive && setWatchLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, [currentEp?.id]);
 
-  //NAVIGATE TO NEXT AND PREVIOUS EPISODES WITH SHIFT+N/P KEYBOARD COMBINATIONS (500MS DELAY)
-  const onPrevEpisode = () => {
-    const prevIndex = currentEpisodeIndex - 1;
-    if (prevIndex >= 0) {
-      handleEpisodeSelect(episodes[prevIndex]);
-    }
-  };
-  const onNextEpisode = () => {
-    const nextIndex = currentEpisodeIndex + 1;
-    if (nextIndex < episodes.length) {
-      handleEpisodeSelect(episodes[nextIndex]);
-    }
-  };
-
-  //----------------------------------------------USEFFECTS----------------------------------------------
-  //SETS DEFAULT SOURCE TYPE AND LANGUGAE TO DEFAULT AND SUB
+  // If this provider has nothing playable for the episode, try the next one.
   useEffect(() => {
-    const defaultSourceType = 'default';
-    const defaultLanguage = 'sub';
-    setSourceType(
-      localStorage.getItem(getSourceTypeKey(animeId || '')) ||
-        defaultSourceType,
+    if (!currentEp || !activeProvider || watchLoading) return;
+    const empty = !!watchError || (watch !== null && watch.streams.length === 0);
+    if (!empty) return;
+    triedProviders.current.add(activeProvider.provider);
+    const next = providerOptions.find(
+      (p) =>
+        !triedProviders.current.has(p.provider) &&
+        p[audio].some((e) => e.number === currentEp.number),
     );
-    setLanguage(
-      localStorage.getItem(getLanguageKey(animeId || '')) || defaultLanguage,
+    if (next) {
+      setProviderNotice(
+        `${providerLabel(activeProvider.provider)} had no sources for episode ${currentEp.number} — switched to ${providerLabel(next.provider)}.`,
+      );
+      setProviderPref(next.provider);
+    }
+  }, [watch, watchError, watchLoading]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ----- history + document title -----
+  const title = anime?.title?.english || anime?.title?.romaji || 'Anime';
+
+  useEffect(() => {
+    if (!currentEp) return;
+    markWatched(
+      animeId,
+      { titleEnglish: anime?.title?.english, titleRomaji: anime?.title?.romaji },
+      { ...currentEp, image: currentEp.image || anime?.image },
     );
-  }, [animeId]);
+    setWatchedTick((n) => n + 1);
+  }, [currentEp?.number, anime?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // SAVES LANGUAGE PREFERENCE TO LOCAL STORAGE
   useEffect(() => {
-    localStorage.setItem(getLanguageKey(animeId), language);
-  }, [language, animeId]);
+    document.title = currentEp
+      ? `${title} - Episode ${currentEp.number} | AniMallu`
+      : `${title} | AniMallu`;
+  }, [title, currentEp]);
 
-  //FETCHES ANIME DATA AND ANIME INFO AS BACKUP
+  const watched = useMemo(() => getWatchedNumbers(animeId), [animeId, watchedTick]);
+  const resumeAt = currentEp ? getProgress(animeId, currentEp.number)?.currentTime ?? 0 : 0;
+
+  // ----- prev / next -----
+  const goPrev = () => currentIndex > 0 && selectEpisode(episodes[currentIndex - 1]);
+  const goNext = () =>
+    currentIndex >= 0 && currentIndex < episodes.length - 1 && selectEpisode(episodes[currentIndex + 1]);
+
   useEffect(() => {
-    let isMounted = true;
-    const fetchInfo = async () => {
-      if (!animeId) {
-        console.error('Anime ID is null.');
-        setLoading(false);
-        return;
-      }
-      setLoading(true);
-      try {
-        const info = await fetchAnimeData(animeId);
-        if (isMounted) {
-          setAnimeInfo(info);
-        }
-      } catch (error) {
-        console.error(
-          'Failed to fetch anime data, trying fetchAnimeInfo as a fallback:',
-          error,
-        );
-        try {
-          const fallbackInfo = await fetchAnimeInfo(animeId);
-          if (isMounted) {
-            setAnimeInfo(fallbackInfo);
-          }
-        } catch (fallbackError) {
-          console.error(
-            'Also failed to fetch anime info as a fallback:',
-            fallbackError,
-          );
-        } finally {
-          if (isMounted) setLoading(false);
-        }
-      }
+    const onKey = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA') return;
+      if (e.shiftKey && e.key.toLowerCase() === 'n') goNext();
+      if (e.shiftKey && e.key.toLowerCase() === 'p') goPrev();
     };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
-    fetchInfo();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [animeId]);
-
-  // FETCHES ANIME EPISODES BASED ON LANGUAGE, ANIME ID AND UPDATES COMPONENTS
-  useEffect(() => {
-    let isMounted = true;
-    const fetchData = async () => {
-      setLoading(true);
-      if (!animeId) return;
-      try {
-        const isDub = language === 'dub';
-        const animeData = await fetchAnimeEpisodes(animeId, undefined, isDub);
-        if (isMounted && animeData) {
-          const transformedEpisodes = animeData
-            .filter((ep: any) => ep.id.includes('-episode-')) // Continue excluding entries without '-episode-'
-            .map((ep: any) => {
-              const episodePart = ep.id.split('-episode-')[1];
-              // New regex to capture the episode number including cases like "7-5"
-              const episodeNumberMatch = episodePart.match(/^(\d+(?:-\d+)?)/);
-              return {
-                ...ep,
-                number: episodeNumberMatch ? episodeNumberMatch[0] : ep.number,
-                id: ep.id,
-                title: ep.title,
-                image: ep.image,
-              };
-            });
-          setEpisodes(transformedEpisodes);
-          const navigateToEpisode = (() => {
-            if (languageChanged) {
-              const currentEpisodeNumber =
-                episodeNumber || currentEpisode.number;
-              return (
-                transformedEpisodes.find(
-                  (ep: any) => ep.number === currentEpisodeNumber,
-                ) || transformedEpisodes[transformedEpisodes.length - 1]
-              );
-            } else if (animeTitle && episodeNumber) {
-              const episodeId = `${animeTitle}-episode-${episodeNumber}`;
-              return (
-                transformedEpisodes.find((ep: any) => ep.id === episodeId) ||
-                navigate(`/watch/${animeId}`, { replace: true })
-              );
-            } else {
-              const savedEpisodeData = localStorage.getItem(
-                LOCAL_STORAGE_KEYS.LAST_WATCHED_EPISODE + animeId,
-              );
-              const savedEpisode = savedEpisodeData
-                ? JSON.parse(savedEpisodeData)
-                : null;
-              return savedEpisode
-                ? transformedEpisodes.find(
-                    (ep: any) => ep.number === savedEpisode.number,
-                  ) || transformedEpisodes[0]
-                : transformedEpisodes[0];
-            }
-          })();
-
-          if (navigateToEpisode) {
-            setCurrentEpisode({
-              id: navigateToEpisode.id,
-              number: navigateToEpisode.number,
-              image: navigateToEpisode.image,
-              title: navigateToEpisode.title,
-              description: navigateToEpisode.description,
-              imageHash: navigateToEpisode.imageHash,
-              airDate: navigateToEpisode.airDate,
-            });
-
-            const newAnimeTitle = navigateToEpisode.id.split('-episode-')[0];
-            navigate(
-              `/watch/${animeId}/${newAnimeTitle}/${navigateToEpisode.number}`,
-              { replace: true },
-            );
-            setLanguageChanged(false); // Reset the languageChanged flag after handling the navigation
-          }
-        }
-      } catch (error) {
-        console.error('Failed to fetch episodes:', error);
-      } finally {
-        if (isMounted) setLoading(false);
-      }
-    };
-
-    // Last visited cache to order continue watching
-    const updateLastVisited = () => {
-      if (!animeInfo || !animeId) return; // Ensure both animeInfo and animeId are available
-
-      const lastVisited = localStorage.getItem(
-        LOCAL_STORAGE_KEYS.LAST_ANIME_VISITED,
-      );
-      const lastVisitedData = lastVisited ? JSON.parse(lastVisited) : {};
-      lastVisitedData[animeId] = {
-        timestamp: Date.now(),
-        titleEnglish: animeInfo.title.english, // Assuming animeInfo contains the title in English
-        titleRomaji: animeInfo.title.romaji, // Assuming animeInfo contains the title in Romaji
-      };
-
-      localStorage.setItem(
-        LOCAL_STORAGE_KEYS.LAST_ANIME_VISITED,
-        JSON.stringify(lastVisitedData),
-      );
-    };
-
-    if (animeId) {
-      updateLastVisited();
-    }
-
-    fetchData();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [
-    animeId,
-    animeTitle,
-    episodeNumber,
-    navigate,
-    language,
-    languageChanged,
-    currentEpisode.number,
-  ]);
-
-  // FETCH EMBEDDED EPISODES IF VIDSTREAMING OR GOGO HAVE BEEN SELECTED
-  useEffect(() => {
-    if (sourceType === 'vidstreaming' && currentEpisode.id) {
-      fetchVidstreamingUrl(currentEpisode.id).catch(console.error);
-    } else if (sourceType === 'gogo' && currentEpisode.id) {
-      fetchEmbeddedUrl(currentEpisode.id).catch(console.error);
-    }
-  }, [sourceType, currentEpisode.id]);
-
-  // UPDATE BACKGROUND IMAGE TO ANIME BANNER IF WIDTH IS UNDER 500PX / OR USE ANIME COVER IF NO BANNER FOUND
-  useEffect(() => {
-    const updateBackgroundImage = () => {
-      const episodeImage = currentEpisode.image;
-      const bannerImage = animeInfo?.cover || animeInfo?.artwork[3].img;
-      if (episodeImage && episodeImage !== animeInfo.image) {
-        const img = new Image();
-        img.onload = () => {
-          if (img.width > 500) {
-            setSelectedBackgroundImage(episodeImage);
-          } else {
-            setSelectedBackgroundImage(bannerImage);
-          }
-        };
-        img.onerror = () => {
-          setSelectedBackgroundImage(bannerImage);
-        };
-        img.src = episodeImage;
-      } else {
-        setSelectedBackgroundImage(bannerImage);
-      }
-    };
-    if (animeInfo && currentEpisode.id !== '0') {
-      updateBackgroundImage();
-    }
-  }, [animeInfo, currentEpisode]);
-
-  //UPDATES VIDEOPLAYER WIDTH WHEN WINDOW GETS RESIZED
-  useEffect(() => {
-    updateVideoPlayerWidth();
-    const handleResize = () => {
-      updateVideoPlayerWidth();
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [updateVideoPlayerWidth]);
-
-  //UPDATES EPISODE LIST MAX HEIGHT BASED ON VIDEO PLAYER CURRENT HEIGHT
-  useEffect(() => {
-    const updateMaxHeight = () => {
-      if (videoPlayerContainerRef.current) {
-        const height = videoPlayerContainerRef.current.offsetHeight;
-        setMaxEpisodeListHeight(`${height}px`);
-      }
-    };
-    updateMaxHeight();
-    window.addEventListener('resize', updateMaxHeight);
-    return () => window.removeEventListener('resize', updateMaxHeight);
-  }, []);
-
-  // SAVES SOURCE TYPE PREFERENCE TO LOCAL STORAGE
-  useEffect(() => {
-    localStorage.setItem(getSourceTypeKey(animeId), sourceType);
-  }, [sourceType, animeId]);
-
-  //NAVIGATE TO NEXT AND PREVIOUS EPISODES WITH SHIFT+N/P KEYBOARD COMBINATIONS (500MS DELAY)
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const targetTagName = (event.target as HTMLElement).tagName.toLowerCase();
-      if (targetTagName === 'input' || targetTagName === 'textarea') {
-        return;
-      }
-      if (!event.shiftKey || !['N', 'P'].includes(event.key.toUpperCase()))
-        return;
-      const now = Date.now();
-      if (now - lastKeypressTime < 200) return;
-      setLastKeypressTime(now);
-      const currentIndex = episodes.findIndex(
-        (ep) => ep.id === currentEpisode.id,
-      );
-      if (
-        event.key.toUpperCase() === 'N' &&
-        currentIndex < episodes.length - 1
-      ) {
-        const nextEpisode = episodes[currentIndex + 1];
-        handleEpisodeSelect(nextEpisode);
-      } else if (event.key.toUpperCase() === 'P' && currentIndex > 0) {
-        const prevEpisode = episodes[currentIndex - 1];
-        handleEpisodeSelect(prevEpisode);
-      }
-    };
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [episodes, currentEpisode, handleEpisodeSelect, lastKeypressTime]);
-
-  //SET PAGE TITLE TO MIRURO + ANIME TITLE
-  useEffect(() => {
-    if (animeInfo && animeInfo.title) {
-      document.title =
-        'Miruro | ' +
-        (animeInfo.title.english ||
-          animeInfo.title.romaji ||
-          animeInfo.title.romaji ||
-          '');
-    } else {
-      document.title = 'AniMallu';
-    }
-  }, [animeInfo]);
-
-  //No idea
-  useEffect(() => {
-    let isMounted = true;
-    const fetchInfo = async () => {
-      if (!animeId) {
-        console.error('Anime ID is undefined.');
-        return;
-      }
-      try {
-        const info = await fetchAnimeData(animeId);
-        if (isMounted) {
-          setAnimeInfo(info);
-        }
-      } catch (error) {
-        console.error('Failed to fetch anime info:', error);
-      }
-    };
-    fetchInfo();
-    return () => {
-      isMounted = false;
-    };
-  }, [animeId]);
-
-  //SHOW NO EPISODES DIV IF NO RESPONSE AFTER 10 SECONDS
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (!episodes || episodes.length === 0) {
-        setShowNoEpisodesMessage(true);
-      }
-    }, 10000);
-    return () => clearTimeout(timeoutId);
-  }, [loading, episodes]);
-
-  // SHOW NO EPISODES DIV IF NOT LOADING AND NO EPISODES FOUND
-  useEffect(() => {
-    if (!loading && episodes.length === 0) {
-      setShowNoEpisodesMessage(true);
-    } else {
-      setShowNoEpisodesMessage(false);
-    }
-  }, [loading, episodes]);
+  // ----- render -----
+  const poster = currentEp?.image || anime?.cover || anime?.image;
+  const noSources = providers !== null && providers.length === 0;
+  const relations = toShelfItems(
+    (anime?.relations ?? []).filter((r: any) => ANIME_FORMATS.includes(r.type)),
+  );
+  const recommendations = toShelfItems(
+    (anime?.recommendations ?? []).filter((r: any) => ANIME_FORMATS.includes(r.type)),
+  );
 
   return (
-    <WatchContainer>
-      {animeInfo &&
-      animeInfo.status === 'Not yet aired' &&
-      animeInfo.trailer ? (
-        <div style={{ textAlign: 'center' }}>
-          <strong>
-            <h2>Time Remaining:</h2>
-          </strong>
-          {animeInfo &&
-          animeInfo.nextAiringEpisode &&
-          countdown !== 'Airing now or aired' ? (
-            <p>
-              <FaBell /> {countdown}
-            </p>
+    <>
+      <Page>
+        <Main>
+          {providers === null ? (
+            <Skeleton $h='min(56vw, 38rem)' />
+          ) : noSources ? (
+            <Notice $tone='error'>
+              <strong>No streaming sources found for this anime yet.</strong>
+              <br />
+              {providersError ||
+                'None of the providers has episodes for it. It may be too new or not licensed for streaming.'}
+              <div style={{ marginTop: '0.6rem', display: 'flex', gap: '0.5rem' }}>
+                <Btn onClick={() => setReloadKey((k) => k + 1)}>Retry</Btn>
+                <Btn as={Link as any} to={`/anime/${animeId}`}>
+                  Back to details
+                </Btn>
+              </div>
+            </Notice>
           ) : (
-            <p>Unknown</p>
-          )}
-          {animeInfo.trailer && (
-            <IframeTrailer
-              src={`https://www.youtube.com/embed/${animeInfo.trailer.id}`}
-              allow='accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
-              allowFullScreen
-            />
-          )}
-        </div>
-      ) : showNoEpisodesMessage ? (
-        <NoEpsFoundDiv>
-          <h2>No episodes found {':('}</h2>
-          <NoEpsImage>
-            <img src={Image404URL} alt='404 Error'></img>
-          </NoEpsImage>
-          <GoToHomePageButton />
-        </NoEpsFoundDiv>
-      ) : (
-        <WatchWrapper>
-          {!showNoEpisodesMessage && (
             <>
-              <VideoPlayerContainer ref={videoPlayerContainerRef}>
-                {loading ? (
-                  <SkeletonPlayer />
-                ) : sourceType === 'default' ? (
-                  <Player
-                    episodeId={currentEpisode.id}
-                    malId={animeInfo?.malId}
-                    banner={selectedBackgroundImage}
-                    updateDownloadLink={updateDownloadLink}
-                    onEpisodeEnd={handleEpisodeEnd}
-                    onPrevEpisode={onPrevEpisode}
-                    onNextEpisode={onNextEpisode}
-                    animeTitle={
-                      animeInfo?.title?.english || animeInfo?.title?.romaji
-                    }
-                  />
-                ) : (
-                  <EmbedPlayer src={embeddedVideoUrl} />
+              <StreamPlayer
+                watch={watch}
+                loading={watchLoading || !currentEp}
+                error={watchError}
+                poster={poster || undefined}
+                title={`${title} - Episode ${currentEp?.number ?? ''}`}
+                startTime={resumeAt}
+                autoPlay={autoPlay}
+                autoNext={autoNext}
+                autoSkip={autoSkip}
+                onEnded={goNext}
+                onProgress={(t, d) =>
+                  currentEp && saveProgress(animeId, currentEp.number, t, d)
+                }
+              />
+
+              <NowPlaying>
+                <div>
+                  <h1>{title}</h1>
+                  <p>
+                    {currentEp
+                      ? `Episode ${currentEp.number}${currentEp.title ? ` — ${currentEp.title}` : ''}`
+                      : ''}
+                  </p>
+                </div>
+                <NavButtons>
+                  <Btn onClick={goPrev} disabled={currentIndex <= 0} title='Previous (Shift+P)'>
+                    <FaStepBackward /> <span>Prev</span>
+                  </Btn>
+                  <Btn
+                    onClick={goNext}
+                    disabled={currentIndex < 0 || currentIndex >= episodes.length - 1}
+                    title='Next (Shift+N)'
+                    $primary
+                  >
+                    <span>Next</span> <FaStepForward />
+                  </Btn>
+                </NavButtons>
+              </NowPlaying>
+
+              <Controls>
+                <Group>
+                  Audio
+                  <Segment>
+                    <SegBtn
+                      $active={audio === 'sub'}
+                      disabled={!hasAudio.sub}
+                      onClick={() => changeAudio('sub')}
+                    >
+                      SUB
+                    </SegBtn>
+                    <SegBtn
+                      $active={audio === 'dub'}
+                      disabled={!hasAudio.dub}
+                      onClick={() => changeAudio('dub')}
+                    >
+                      DUB
+                    </SegBtn>
+                  </Segment>
+                </Group>
+
+                {providerOptions.length > 0 && (
+                  <Group>
+                    Source
+                    <Select
+                      value={activeProvider?.provider}
+                      onChange={(e) => changeProvider(e.target.value)}
+                      aria-label='Provider'
+                    >
+                      {providerOptions.map((p) => (
+                        <option key={p.provider} value={p.provider}>
+                          {providerLabel(p.provider)} ({p[audio].length})
+                        </option>
+                      ))}
+                    </Select>
+                  </Group>
                 )}
-              </VideoPlayerContainer>
-              <EpisodeListContainer style={{ maxHeight: maxEpisodeListHeight }}>
-                {loading ? (
-                  <SkeletonPlayer />
-                ) : (
-                  <EpisodeList
-                    animeId={animeId}
-                    episodes={episodes}
-                    selectedEpisodeId={currentEpisode.id}
-                    onEpisodeSelect={(episodeId: string) => {
-                      const episode = episodes.find((e) => e.id === episodeId);
-                      if (episode) {
-                        handleEpisodeSelect(episode);
-                      }
+
+                <Toggle>
+                  <input
+                    type='checkbox'
+                    checked={autoPlay}
+                    onChange={(e) => {
+                      setAutoPlay(e.target.checked);
+                      writeFlag('autoPlay', e.target.checked);
                     }}
-                    maxListHeight={maxEpisodeListHeight}
                   />
+                  Autoplay
+                </Toggle>
+                <Toggle>
+                  <input
+                    type='checkbox'
+                    checked={autoNext}
+                    onChange={(e) => {
+                      setAutoNext(e.target.checked);
+                      writeFlag('autoNext', e.target.checked);
+                    }}
+                  />
+                  Auto next
+                </Toggle>
+                <Toggle>
+                  <input
+                    type='checkbox'
+                    checked={autoSkip}
+                    onChange={(e) => {
+                      setAutoSkip(e.target.checked);
+                      writeFlag('autoSkip', e.target.checked);
+                    }}
+                  />
+                  Auto skip intro/outro
+                </Toggle>
+
+                {watch?.downloads?.[0] && (
+                  <Btn as='a' {...({ href: watch.downloads[0].url, target: '_blank', rel: 'noreferrer' } as any)}>
+                    <FaDownload /> <span>Download</span>
+                  </Btn>
                 )}
-              </EpisodeListContainer>
+              </Controls>
+
+              {audio !== audioPref && (
+                <Notice $tone='warn'>
+                  {audioPref.toUpperCase()} isn’t available for this anime, so{' '}
+                  {audio.toUpperCase()} is selected.
+                </Notice>
+              )}
+              {providerNotice && <Notice $tone='warn'>{providerNotice}</Notice>}
             </>
           )}
-        </WatchWrapper>
-      )}
-      <DataWrapper>
-        <SourceAndData $videoPlayerWidth={videoPlayerWidth}>
-          {animeInfo && animeInfo.status !== 'Not yet aired' && (
-            <MediaSource
-              sourceType={sourceType}
-              setSourceType={setSourceType}
-              language={language}
-              setLanguage={setLanguage}
-              downloadLink={downloadLink}
-              episodeId={currentEpisode.number.toString()}
-              airingTime={
-                animeInfo && animeInfo.status === 'Ongoing'
-                  ? countdown
-                  : undefined
-              }
-              nextEpisodenumber={nextEpisodenumber}
+
+          <InfoCard>
+            {anime ? (
+              <img src={anime.image} alt={`${title} poster`} />
+            ) : (
+              <Skeleton $h='12rem' />
+            )}
+            <div>
+              <h2>{title}</h2>
+              {anime ? (
+                <>
+                  <Chips>
+                    {anime.rating ? (
+                      <Chip>
+                        <FaStar /> {(anime.rating / 10).toFixed(1)}
+                      </Chip>
+                    ) : null}
+                    {anime.type && <Chip>{anime.type.replace('_', ' ')}</Chip>}
+                    {anime.releaseDate && <Chip>{anime.releaseDate}</Chip>}
+                    {anime.status && <Chip>{anime.status}</Chip>}
+                    {anime.totalEpisodes ? <Chip>{anime.totalEpisodes} eps</Chip> : null}
+                    {(anime.genres ?? []).slice(0, 4).map((g) => (
+                      <Chip key={g}>{g}</Chip>
+                    ))}
+                  </Chips>
+                  <p className='desc'>{anime.description}</p>
+                  <Btn as={Link as any} to={`/anime/${animeId}`}>
+                    <FaInfoCircle /> Full details
+                  </Btn>
+                </>
+              ) : (
+                <Skeleton $h='6rem' />
+              )}
+            </div>
+          </InfoCard>
+
+          <Shelf title='Related' items={relations} />
+          <Shelf title='You might also like' items={recommendations} />
+        </Main>
+
+        <Side>
+          {providers === null ? (
+            <Skeleton $h='28rem' />
+          ) : (
+            <EpisodePanel
+              episodes={episodes}
+              currentNumber={currentEp?.number}
+              watched={watched}
+              fallbackImage={anime?.cover || anime?.image}
+              onSelect={selectEpisode}
             />
           )}
-          {animeInfo && <AnimeData animeData={animeInfo} />}
-        </SourceAndData>
-        <RalationsTable>
-          {animeInfo && <AnimeDataList animeData={animeInfo} />}
-        </RalationsTable>
-      </DataWrapper>
-    </WatchContainer>
+        </Side>
+      </Page>
+    </>
   );
-};
-
-export default Watch;
+}

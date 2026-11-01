@@ -3,7 +3,9 @@ import {
   DETAIL_QUERY,
   mapMedia,
   mapPage,
+  mapRecent,
   PAGE_QUERY,
+  RECENT_QUERY,
 } from './anilist';
 
 // Catalog, search and anime details come straight from AniList (see
@@ -225,15 +227,25 @@ export const fetchTopAiringAnime = (page: number, perPage: number) =>
 export const fetchUpcomingSeasons = (page: number, perPage: number) =>
   fetchList('Upcoming', page, perPage);
 
-// Recently updated airing shows (AniList has no "recent episodes" feed).
-export async function fetchRecentEpisodes(
-  page: number = 1,
-  perPage: number = 18,
-  _provider?: string,
-) {
-  return fetchAdvancedSearch('', page, perPage, {
-    status: 'RELEASING',
-    sort: ['UPDATED_AT_DESC'],
-  });
+// Recently aired episodes (last 3 days), newest first, one entry per anime.
+export async function fetchRecentEpisodes() {
+  // Round to 5 minutes so the cache key is stable between renders.
+  const before = Math.floor(Date.now() / 300000) * 300;
+  const after = before - 3 * 24 * 3600;
+  const pages = await Promise.all(
+    [1, 2].map((page) =>
+      cachedAniList(
+        listCache,
+        generateCacheKey('recent', String(page), String(before)),
+        RECENT_QUERY,
+        { page, perPage: 50, before, after },
+        mapRecent,
+      ),
+    ),
+  );
+  const seen = new Set<string>();
+  const results = pages
+    .flat()
+    .filter((a: any) => (seen.has(a.id) ? false : (seen.add(a.id), true)));
+  return { results };
 }
-

@@ -41,7 +41,11 @@ export function getLastWatchedNumber(animeId: string): number | undefined {
 
 export function markWatched(
   animeId: string,
-  anime: { titleEnglish?: string | null; titleRomaji?: string | null },
+  anime: {
+    titleEnglish?: string | null;
+    titleRomaji?: string | null;
+    totalEpisodes?: number | null;
+  },
   episode: {
     number: number;
     title?: string | null;
@@ -70,6 +74,7 @@ export function markWatched(
   visited[animeId] = {
     titleEnglish: anime.titleEnglish ?? '',
     titleRomaji: anime.titleRomaji ?? '',
+    totalEpisodes: anime.totalEpisodes ?? null,
     timestamp: Date.now(),
   };
   write(VISITED, visited);

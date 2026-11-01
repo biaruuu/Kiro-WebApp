@@ -113,6 +113,10 @@ img,
 video {
   max-width: 100%;
 }
+html,
+body {
+  overflow-x: clip;
+}
 button,
 input,
 select {

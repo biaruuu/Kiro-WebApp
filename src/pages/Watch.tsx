@@ -490,7 +490,11 @@ export default function Watch() {
     if (!currentEp) return;
     markWatched(
       animeId,
-      { titleEnglish: anime?.title?.english, titleRomaji: anime?.title?.romaji },
+      {
+        titleEnglish: anime?.title?.english,
+        titleRomaji: anime?.title?.romaji,
+        totalEpisodes: anime?.totalEpisodes,
+      },
       { ...currentEp, image: currentEp.image || anime?.image },
     );
     setWatchedTick((n) => n + 1);

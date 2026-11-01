@@ -1,208 +1,295 @@
-import { useEffect, useState } from 'react';
-import styled, { keyframes } from 'styled-components';
-import { Link } from 'react-router-dom'; // Assuming you're using React Router for navigation
-import { TbCardsFilled } from 'react-icons/tb';
-import { FaStar, FaCalendarAlt } from 'react-icons/fa';
-import { Anime } from '../../index';
+import { useState } from 'react';
+import styled from 'styled-components';
+import { Link } from 'react-router-dom';
+import {
+  FaChevronDown,
+  FaChevronRight,
+  FaClosedCaptioning,
+  FaRegCalendarAlt,
+  FaRegStar,
+} from 'react-icons/fa';
+import type { Anime } from '../../hooks/interface';
 
-const slideUpAnimation = keyframes`
-  0% { opacity: 0.4; transform: translateY(10px); }
-  100% { opacity: 1; transform: translateY(0); }
+const Panel = styled.section`
+  border: 1.5px solid var(--global-border);
+  border-radius: 1.4rem;
+  padding: 0.35rem 0.9rem 0.9rem;
+  margin-bottom: 1.5rem;
+  background: transparent;
 `;
 
-const SidebarStyled = styled.div`
-  transition: 0.2s ease-in-out;
-  margin: 0;
-  padding: 0;
-  max-width: 24rem;
-  @media (max-width: 1000px) {
-    max-width: unset;
+const PanelHeader = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  width: 100%;
+  padding: 1.1rem 0.4rem;
+  border: none;
+  background: none;
+  color: var(--global-text);
+  font-size: 1.45rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  text-align: left;
+  cursor: pointer;
+
+  svg {
+    font-size: 1rem;
+    transition: transform 0.25s ease;
   }
-`;
-
-const IndicatorDot = styled.div`
-  width: 0.5rem;
-  height: 0.5rem;
-  border-radius: 50%;
-  margin: 0rem;
-  flex-shrink: 0;
-`;
-
-const TitleWithDot = styled.div`
-  display: flex;
-  align-items: center;
-  padding: 0.5rem;
-  margin-top: 0.35rem;
-  gap: 0.4rem;
-  border-radius: var(--global-border-radius);
-  cursor: pointer;
-  transition: background 0.2s ease;
-`;
-
-const CompletedIndicator = styled(IndicatorDot)`
-  background-color: var(--completed-indicator-color);
-`;
-
-const CancelledIndicator = styled(IndicatorDot)`
-  background-color: var(--cancelled-indicator-color);
-`;
-
-const NotYetAiredIndicator = styled(IndicatorDot)`
-  background-color: var(--not-yet-aired-indicator-color);
-`;
-
-const OngoingIndicator = styled(IndicatorDot)`
-  background-color: var(--ongoing-dot-color);
-`;
-
-const DefaultIndicator = styled(IndicatorDot)`
-  background-color: var(--default-indicator-color);
-`;
-
-const AnimeCard = styled.div`
-  display: flex;
-  background-color: var(--global-div);
-  border-radius: var(--global-border-radius);
-  align-items: center;
-  overflow: hidden;
-  gap: 0.5rem;
-  cursor: pointer;
-  margin-bottom: 0.5rem;
-  animation: ${slideUpAnimation} 0.5s ease-in-out;
-  animation-fill-mode: backwards;
-  transition:
-    background-color 0s ease-in-out,
-    margin-left 0.2s ease-in-out 0.1s;
-    box-shadow 0.2s ease-in-out;
-
-  &:hover,
-  &:active,
-  &:focus {
-    background-color: var(--global-div-tr);
-    margin-left: 0.35rem;
-    box-shadow: 0 0 20px rgba(0, 0, 0, 0.2);
+  &[aria-expanded='true'] svg {
+    transform: rotate(90deg);
   }
 
   @media (max-width: 500px) {
-    &:hover,
-    &:active,
-    &:focus {
-      margin-left: unset;
-    }
+    font-size: 1.3rem;
   }
 `;
 
-const AnimeImageStyled = styled.img`
-  width: 4.25rem;
-  height: 6rem;
-  object-fit: cover;
-  border-radius: var(--global-border-radius);
+const List = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
 `;
 
-const InfoStyled = styled.div``;
-
-const Title = styled.p`
-  top: 0;
-  margin-bottom: 0.5rem;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
+const Item = styled(Link)<{ $bg?: string }>`
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  gap: 1rem;
+  min-height: 6rem;
+  border-radius: 1rem;
   overflow: hidden;
-  font-size: 0.9rem;
-  margin: 0;
-`;
+  text-decoration: none;
+  color: var(--global-text);
+  background: var(--global-secondary-bg);
+  isolation: isolate;
+  transition: transform 0.15s ease;
 
-const Details = styled.p`
-  font-size: 0.75rem;
-  margin: 0;
-  color: rgba(102, 102, 102, 0.75);
-  svg {
-    margin-left: 0.4rem;
+  /* faded banner artwork on the right-hand side of the row */
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    background: ${({ $bg }) => ($bg ? `url(${$bg})` : 'none')} right center / cover no-repeat;
+    opacity: 0.55;
+  }
+  &::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: linear-gradient(
+      to right,
+      var(--global-secondary-bg) 38%,
+      color-mix(in srgb, var(--global-secondary-bg) 55%, transparent) 70%,
+      transparent
+    );
+  }
+  &:hover {
+    transform: translateX(2px);
+  }
+
+  .thumb {
+    flex: none;
+    width: 4.9rem;
+    background: var(--global-tertiary-bg);
+  }
+  .thumb img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.6rem;
+    padding: 0.7rem 0.9rem 0.7rem 0;
+  }
+  .title {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.6rem;
+    font-size: 1.12rem;
+    font-weight: 600;
+    line-height: 1.3;
+  }
+  .title span {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
   }
 `;
 
-export const HomeSideBar: React.FC<{ animeData: Anime[] }> = ({
+const Dot = styled.i<{ $color: string }>`
+  flex: none;
+  width: 0.7rem;
+  height: 0.7rem;
+  margin-top: 0.4rem;
+  border-radius: 50%;
+  background: ${({ $color }) => $color};
+`;
+
+const Chip = styled.span`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.6rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--global-tertiary-bg) 85%, transparent);
+  color: var(--global-text-muted);
+  font-size: 0.88rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+
+  svg {
+    font-size: 0.85rem;
+  }
+`;
+
+const MoreBar = styled.button`
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 2.9rem;
+  margin-top: 0.7rem;
+  border: none;
+  border-radius: 0.9rem;
+  background: var(--global-secondary-bg);
+  color: var(--global-text-muted);
+  cursor: pointer;
+
+  svg {
+    transition: transform 0.25s ease;
+  }
+  &[aria-expanded='true'] svg {
+    transform: rotate(180deg);
+  }
+  &:hover {
+    color: var(--global-text);
+  }
+`;
+
+const Empty = styled.p`
+  margin: 0;
+  padding: 1rem 0.4rem 0.5rem;
+  color: var(--global-text-muted);
+`;
+
+const dotColor = (status?: string) => {
+  switch (status) {
+    case 'Ongoing':
+      return 'var(--ongoing-dot-color)';
+    case 'Completed':
+      return 'var(--completed-indicator-color)';
+    case 'Cancelled':
+      return 'var(--cancelled-indicator-color)';
+    case 'Not yet aired':
+      return 'var(--not-yet-aired-indicator-color)';
+    default:
+      return 'var(--default-indicator-color)';
+  }
+};
+
+const PREVIEW = 5;
+
+export const HomeSideBar = ({
+  title,
   animeData,
+  loading = false,
+  defaultOpen = true,
+}: {
+  title: string;
+  animeData: Anime[];
+  loading?: boolean;
+  defaultOpen?: boolean;
 }) => {
-  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  const [open, setOpen] = useState(defaultOpen);
+  const [expanded, setExpanded] = useState(false);
 
-  useEffect(() => {
-    const handleResize = () => {
-      setWindowWidth(window.innerWidth);
-    };
-
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
-
-  const displayedAnime = windowWidth <= 500 ? animeData.slice(0, 5) : animeData;
+  const shown = expanded ? animeData : animeData.slice(0, PREVIEW);
 
   return (
-    <SidebarStyled>
-      {displayedAnime.map((anime: Anime, index) => (
-        <Link
-          to={`/anime/${anime.id}`}
-          key={anime.id}
-          style={{ textDecoration: 'none', color: 'inherit' }}
-          title={`${anime.title.userPreferred}`}
-          aria-label={`Watch ${anime.title.userPreferred}`}
-        >
-          <AnimeCard
-            key={anime.id}
-            style={{ animationDelay: `${index * 0.1}s` }}
-          >
-            <AnimeImageStyled
-              src={anime.image}
-              alt={anime.title.userPreferred}
-            />
-            <InfoStyled>
-              <TitleWithDot>
-                {(() => {
-                  switch (anime.status) {
-                    case 'Completed':
-                      return <CompletedIndicator />;
-                    case 'Cancelled':
-                      return <CancelledIndicator />;
-                    case 'Not yet aired':
-                      return <NotYetAiredIndicator />;
-                    case 'Ongoing':
-                      return <OngoingIndicator />;
-                    default:
-                      return <DefaultIndicator />;
-                  }
-                })()}
-                <Title>{anime.title.english || anime.title.romaji}</Title>
-              </TitleWithDot>
-              <Details>
-                {anime.type && <>{anime.type}</>}
-                {anime.releaseDate && (
-                  <>
-                    <FaCalendarAlt /> {anime.releaseDate}
-                  </>
-                )}
-                {anime.currentEpisode !== null &&
-                  anime.currentEpisode !== undefined &&
-                  anime.totalEpisodes !== null &&
-                  anime.totalEpisodes !== undefined &&
-                  anime.totalEpisodes !== 0 &&
-                  anime.totalEpisodes !== 0 && (
-                    <>
-                      <TbCardsFilled /> {anime.currentEpisode}
-                      {' / '}
-                      {anime.totalEpisodes}
-                    </>
-                  )}
+    <Panel>
+      <PanelHeader aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <FaChevronRight /> {title}
+      </PanelHeader>
 
-                {anime.rating && (
-                  <>
-                    <FaStar /> {anime.rating}
-                  </>
-                )}
-              </Details>
-            </InfoStyled>
-          </AnimeCard>
-        </Link>
-      ))}
-    </SidebarStyled>
+      {open && (
+        <>
+          {loading ? (
+            <Empty>Loading…</Empty>
+          ) : animeData.length === 0 ? (
+            <Empty>Nothing to show right now.</Empty>
+          ) : (
+            <List>
+              {shown.map((anime) => {
+                const name = anime.title.english || anime.title.romaji || 'Untitled';
+                const episodes = anime.currentEpisode || anime.totalEpisodes;
+                return (
+                  <Item
+                    key={anime.id}
+                    to={`/anime/${anime.id}`}
+                    $bg={anime.cover && anime.cover !== anime.image ? anime.cover : anime.image}
+                    title={name}
+                  >
+                    <div className='thumb'>
+                      <img src={anime.image} alt={name} loading='lazy' />
+                    </div>
+                    <div className='body'>
+                      <div className='title'>
+                        <Dot $color={dotColor(anime.status)} />
+                        <span>{name}</span>
+                      </div>
+                      <div className='chips'>
+                        {anime.type && <Chip>{anime.type.replace('_', ' ')}</Chip>}
+                        {anime.releaseDate ? (
+                          <Chip>
+                            <FaRegCalendarAlt /> {anime.releaseDate}
+                          </Chip>
+                        ) : null}
+                        {episodes ? (
+                          <Chip>
+                            <FaClosedCaptioning /> {episodes}
+                          </Chip>
+                        ) : null}
+                        {anime.rating ? (
+                          <Chip>
+                            <FaRegStar /> {anime.rating}
+                          </Chip>
+                        ) : null}
+                      </div>
+                    </div>
+                  </Item>
+                );
+              })}
+            </List>
+          )}
+
+          {animeData.length > PREVIEW && (
+            <MoreBar
+              aria-expanded={expanded}
+              aria-label={expanded ? 'Show fewer' : 'Show more'}
+              onClick={() => setExpanded((v) => !v)}
+            >
+              <FaChevronDown />
+            </MoreBar>
+          )}
+        </>
+      )}
+    </Panel>
   );
 };

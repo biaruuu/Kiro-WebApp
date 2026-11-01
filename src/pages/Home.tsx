@@ -1,387 +1,420 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import styled from 'styled-components';
+import { HomeCarousel } from '../components/Home/HomeCarousel';
+import { EpisodeCard } from '../components/Home/EpisodeCard';
 import {
-  HomeCarousel,
-  CardGrid,
-  StyledCardGrid,
-  SkeletonSlide,
-  SkeletonCard,
-  fetchTrendingAnime,
+  LatestEpisodes,
+  type RecentAnime,
+} from '../components/Home/LatestEpisodes';
+import { HomeSideBar } from '../components/Home/HomeSideBar';
+import { Link } from 'react-router-dom';
+import { FaRegStar } from 'react-icons/fa';
+import {
   fetchPopularAnime,
-  fetchTopAnime,
-  fetchTopAiringAnime,
-  fetchUpcomingSeasons,
   fetchRecentEpisodes,
-  HomeSideBar,
-  EpisodeCard,
-  getSeason,
-} from '../index';
-import { Anime, Episode } from '../hooks/interface';
+  fetchTopAiringAnime,
+  fetchTopAnime,
+  fetchTrendingAnime,
+  fetchUpcomingSeasons,
+} from '../hooks/useApi';
+import type { Anime } from '../hooks/interface';
 
-const SimpleLayout = styled.div`
-  gap: 1.5rem;
-  margin: 0 auto;
-  max-width: 125rem;
-  border-radius: var(--global-border-radius);
+// ---------------------------------------------------------------------------
+// Layout
+// ---------------------------------------------------------------------------
+const Page = styled.div`
   display: flex;
   flex-direction: column;
 `;
 
-const ContentSidebarLayout = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
+const Body = styled.div`
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0 2.5rem;
+  max-width: 105rem;
   width: 100%;
+  margin: 0 auto;
+  padding-top: 1.75rem;
 
+  @media (min-width: 1100px) {
+    grid-template-columns: minmax(0, 1fr) 25rem;
+    align-items: start;
+  }
+  @media (min-width: 1600px) {
+    grid-template-columns: minmax(0, 1fr) 29rem;
+  }
+`;
+
+const Main = styled.div`
   min-width: 0;
+`;
 
-  & > div {
-    min-width: 0;
+const Side = styled.aside`
+  min-width: 0;
+`;
+
+const Browse = styled.section`
+  max-width: 105rem;
+  width: 100%;
+  margin: 0.5rem auto 0;
+`;
+
+const BrowseHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+
+  h2 {
+    margin: 0;
+    font-size: clamp(1.45rem, 4.6vw, 1.9rem);
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+`;
+
+const Tabs = styled.div`
+  display: inline-flex;
+  gap: 0.4rem;
+  padding: 0.3rem;
+  border-radius: 999px;
+  border: 1.5px solid var(--global-border);
+`;
+
+const Tab = styled.button<{ $active: boolean }>`
+  padding: 0.65rem 1.2rem;
+  border: none;
+  border-radius: 999px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: ${({ $active }) => ($active ? '#0b0b10' : 'var(--global-text)')};
+  background: ${({ $active }) => ($active ? '#b7a9ff' : 'transparent')};
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
+
+  @media (max-width: 420px) {
+    padding: 0.55rem 0.85rem;
+    font-size: 0.85rem;
+  }
+`;
+
+const PosterGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 1.4rem 0.9rem;
+
+  @media (min-width: 700px) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1.8rem 1.2rem;
   }
   @media (min-width: 1000px) {
-    flex-direction: row;
-    justify-content: space-between;
-    & > div:last-child {
-      flex: 0 0 22rem;
-    }
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
   @media (min-width: 1500px) {
-    & > div:last-child {
-      flex-basis: 26rem;
+    grid-template-columns: repeat(8, minmax(0, 1fr));
+  }
+`;
+
+const Poster = styled(Link)<{ $color?: string }>`
+  display: block;
+  min-width: 0;
+  text-decoration: none;
+  color: var(--global-text);
+
+  .art {
+    position: relative;
+    aspect-ratio: 2 / 3;
+    border-radius: 1rem;
+    overflow: hidden;
+    background: var(--global-secondary-bg);
+  }
+  .art img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+    transition:
+      transform 0.35s ease,
+      filter 0.25s ease;
+  }
+  .art::after {
+    content: '';
+    position: absolute;
+    inset: 55% 0 0;
+    background: linear-gradient(to top, rgba(8, 8, 12, 0.9), transparent);
+  }
+  &:hover .art img {
+    transform: scale(1.06);
+    filter: brightness(0.65);
+  }
+  .tags {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 1;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.4rem;
+    padding: 0.6rem 0.75rem;
+    color: #fff;
+    font-size: 0.95rem;
+    font-weight: 700;
+  }
+  .tags span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+  }
+  .name {
+    margin: 0.75rem 0 0.2rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    line-height: 1.35;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    transition: color 0.2s ease;
+  }
+  .sub {
+    margin: 0;
+    font-size: 0.88rem;
+    color: var(--global-text-muted);
+  }
+  &:hover .name {
+    color: ${({ $color }) => $color || 'var(--primary-accent)'};
+  }
+`;
+
+const PosterSkeleton = styled.div`
+  aspect-ratio: 2 / 3.5;
+  border-radius: 1rem;
+  background: linear-gradient(
+    90deg,
+    var(--global-secondary-bg),
+    var(--global-tertiary-bg),
+    var(--global-secondary-bg)
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+  @keyframes shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
     }
   }
 `;
 
-const TabContainer = styled.div`
+const ErrorBanner = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 0.5rem;
-  border-radius: var(--global-border-radius);
-  width: 100%;
-`;
-
-const Tab = styled.div<{ $isActive: boolean }>`
-  background: ${({ $isActive }) =>
-    $isActive ? 'var(--primary-accent)' : 'var(--global-secondary-bg)'};
-  color: ${({ $isActive }) => ($isActive ? '#fff' : 'var(--global-text)')};
-  border-radius: 999px;
-  border: none;
-  cursor: pointer;
-  font-weight: bold;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin: 1.25rem auto 0;
+  max-width: 105rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: 0.9rem;
+  border: 1px solid rgba(244, 67, 54, 0.4);
+  background: rgba(244, 67, 54, 0.1);
   color: var(--global-text);
-  position: relative;
-  overflow: hidden;
-  margin: 0;
-  font-size: 0.8rem;
-  padding: 0.7rem 1.4rem;
+  font-size: 0.95rem;
 
-  transition: background-color 0.3s ease;
-
-  &:hover,
-  &:active,
-  &:focus {
+  button {
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 0.6rem;
     background: var(--primary-accent);
-  }
-
-  &:hover,
-  &:active,
-  &:focus {
     color: #fff;
-  }
-
-  @media (max-width: 500px) {
-    padding: 0.55rem 1rem;
+    font-weight: 600;
+    cursor: pointer;
   }
 `;
 
-const Section = styled.section`
-  padding: 0rem;
-  border-radius: var(--global-border-radius);
-`;
+// ---------------------------------------------------------------------------
+type TabKey = 'trending' | 'popular' | 'topRated';
 
-const ErrorMessage = styled.div`
-  padding: 1rem;
-  margin: 1rem 0;
-  background-color: rgba(244, 67, 54, 0.12);
-  border-left: 4px solid #f44336;
-  color: #ff6b5e;
-  border-radius: var(--global-border-radius);
+interface HomeData {
+  trending: Anime[];
+  popular: Anime[];
+  topRated: Anime[];
+  topAiring: Anime[];
+  upcoming: Anime[];
+  recent: RecentAnime[];
+}
 
-  p {
-    margin: 0;
-    font-weight: bold;
+const EMPTY: HomeData = {
+  trending: [],
+  popular: [],
+  topRated: [],
+  topAiring: [],
+  upcoming: [],
+  recent: [],
+};
+
+const readTab = (): TabKey => {
+  try {
+    const saved = JSON.parse(localStorage.getItem('home tab') || 'null');
+    if (
+      saved &&
+      Date.now() - saved.timestamp < 24 * 3600 * 1000 &&
+      ['trending', 'popular', 'topRated'].includes(saved.tab)
+    ) {
+      return saved.tab;
+    }
+  } catch {
+    /* ignore */
   }
-`;
+  return 'trending';
+};
 
 const Home = () => {
-  const [itemsCount, setItemsCount] = useState(
-    window.innerWidth > 500 ? 24 : 15,
-  );
-  const [activeTab, setActiveTab] = useState(() => {
-    const savedData = localStorage.getItem('home tab');
-    if (savedData) {
-      const { tab, timestamp } = JSON.parse(savedData);
-      const now = new Date().getTime();
-      if (now - timestamp < 24 * 60 * 60 * 1000) {
-        return tab;
-      } else {
-        localStorage.removeItem('home tab');
-      }
+  const [data, setData] = useState<HomeData>(EMPTY);
+  const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState(false);
+  const [tab, setTab] = useState<TabKey>(readTab);
+  const [attempt, setAttempt] = useState(0);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setFailed(false);
+    const count = window.innerWidth > 500 ? 24 : 15;
+    // allSettled: one failing list never blanks the whole page.
+    const results = await Promise.allSettled([
+      fetchTrendingAnime(1, 24),
+      fetchPopularAnime(1, count),
+      fetchTopAnime(1, count),
+      fetchTopAiringAnime(1, 10),
+      fetchUpcomingSeasons(1, 10),
+      fetchRecentEpisodes(),
+    ]);
+    if (results.every((r) => r.status === 'rejected')) setFailed(true);
+
+    const list = (i: number): Anime[] => {
+      const r = results[i];
+      return r.status === 'fulfilled' && Array.isArray((r.value as any)?.results)
+        ? (r.value as any).results
+        : [];
+    };
+    setData({
+      trending: list(0),
+      popular: list(1),
+      topRated: list(2),
+      topAiring: list(3),
+      upcoming: list(4),
+      recent: list(5) as RecentAnime[],
+    });
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load, attempt]);
+
+  useEffect(() => {
+    document.title = 'AniMallu | Watch HD Anime for Free';
+  }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'home tab',
+        JSON.stringify({ tab, timestamp: Date.now() }),
+      );
+    } catch {
+      /* ignore */
     }
-    return 'trending';
-  });
+  }, [tab]);
 
-  const [state, setState] = useState({
-    watchedEpisodes: [] as Episode[],
-    trendingAnime: [] as Anime[],
-    popularAnime: [] as Anime[],
-    topAnime: [] as Anime[],
-    topAiring: [] as Anime[],
-    Upcoming: [] as Anime[],
-    recentEpisodes: [] as Anime[],
-    error: null as string | null,
-    loading: {
-      trending: true,
-      popular: true,
-      topRated: true,
-      topAiring: true,
-      Upcoming: true,
-      recent: true,
-    },
-  });
-
-  useEffect(() => {
-    const handleResize = () => {
-      setItemsCount(window.innerWidth > 500 ? 24 : 15);
-    };
-
-    window.addEventListener('resize', handleResize);
-    handleResize();
-
-    return () => {
-      window.removeEventListener('resize', handleResize);
-    };
-  }, []);
-
-  useEffect(() => {
-    const fetchWatchedEpisodes = () => {
-      const watchedEpisodesData = localStorage.getItem('watched-episodes');
-      if (watchedEpisodesData) {
-        const allEpisodes = JSON.parse(watchedEpisodesData);
-        const latestEpisodes: Episode[] = [];
-        Object.keys(allEpisodes).forEach((animeId) => {
-          const episodes = allEpisodes[animeId];
-          const latestEpisode = episodes[episodes.length - 1];
-          latestEpisodes.push(latestEpisode);
-        });
-        setState((prevState) => ({
-          ...prevState,
-          watchedEpisodes: latestEpisodes,
-        }));
-      }
-    };
-
-    fetchWatchedEpisodes();
-  }, []);
-
-  useEffect(() => {
-    const fetchCount = Math.ceil(itemsCount * 1.4);
-    const fetchData = async () => {
-      try {
-        setState((prevState) => ({ ...prevState, error: null }));
-        // allSettled so one failing endpoint doesn't blank the whole page
-        const results = await Promise.allSettled([
-          fetchTrendingAnime(1, fetchCount),
-          fetchPopularAnime(1, fetchCount),
-          fetchTopAnime(1, fetchCount),
-          fetchTopAiringAnime(1, 6),
-          fetchUpcomingSeasons(1, 6),
-          fetchRecentEpisodes(1, fetchCount),
-        ]);
-        if (results.every((r) => r.status === 'rejected')) {
-          throw (results[0] as PromiseRejectedResult).reason;
-        }
-        const list = (i: number): Anime[] => {
-          const r = results[i];
-          return r.status === 'fulfilled' && Array.isArray(r.value?.results)
-            ? filterAndTrimAnime(r.value)
-            : [];
-        };
-        setState((prevState) => ({
-          ...prevState,
-          trendingAnime: list(0),
-          popularAnime: list(1),
-          topAnime: list(2),
-          topAiring: list(3),
-          Upcoming: list(4),
-          recentEpisodes: list(5),
-        }));
-      } catch (fetchError) {
-        setState((prevState) => ({
-          ...prevState,
-          error: 'An unexpected error occurred',
-        }));
-      } finally {
-        setState((prevState) => ({
-          ...prevState,
-          loading: {
-            trending: false,
-            popular: false,
-            topRated: false,
-            topAiring: false,
-            Upcoming: false,
-            recent: false,
-          },
-        }));
-      }
-    };
-
-    fetchData();
-  }, [itemsCount]);
-
-  useEffect(() => {
-    document.title = `AniMallu | Watch HD Anime for Free`;
-  }, [activeTab]);
-
-  useEffect(() => {
-    const now = new Date().getTime();
-    const tabData = JSON.stringify({ tab: activeTab, timestamp: now });
-    localStorage.setItem('home tab', tabData);
-  }, [activeTab]);
-
-  const filterAndTrimAnime = (animeList: any) =>
-    animeList.results
-      /*       .filter(
-              (anime: Anime) =>
-                anime.totalEpisodes !== null &&
-                anime.duration !== null &&
-                anime.releaseDate !== null,
-            ) */
-      .slice(0, itemsCount);
-
-  const renderCardGrid = (
-    animeData: Anime[],
-    isLoading: boolean,
-    hasError: boolean,
-  ) => (
-    <Section>
-      {isLoading || hasError ? (
-        <StyledCardGrid>
-          {Array.from({ length: itemsCount }, (_, index) => (
-            <SkeletonCard key={index} />
-          ))}
-        </StyledCardGrid>
-      ) : (
-        <CardGrid
-          animeData={animeData}
-          hasNextPage={false}
-          onLoadMore={() => {}}
-        />
-      )}
-    </Section>
-  );
-
-  const handleTabClick = (tabName: string) => {
-    setActiveTab(tabName);
-  };
-
-  const SEASON = getSeason(true);
+  const browse =
+    tab === 'trending' ? data.trending : tab === 'popular' ? data.popular : data.topRated;
 
   return (
-    <SimpleLayout>
-      {state.error && (
-        <ErrorMessage title='Error Message'>
-          <p>ERROR: {state.error}</p>
-        </ErrorMessage>
+    <Page>
+      <HomeCarousel data={data.trending} loading={loading} />
+
+      {failed && (
+        <ErrorBanner>
+          <span>Couldn’t load anime right now. Check your connection and try again.</span>
+          <button onClick={() => setAttempt((n) => n + 1)}>Retry</button>
+        </ErrorBanner>
       )}
-      {state.loading.trending || state.error ? (
-        <SkeletonSlide />
-      ) : (
-        <HomeCarousel
-          data={state.trendingAnime}
-          loading={state.loading.trending}
-          error={state.error}
-        />
-      )}
-      <ContentSidebarLayout>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            flexGrow: 1,
-            gap: '1rem',
-          }}
-        >
-          <TabContainer>
-            <Tab
-              title='Trending Tab'
-              $isActive={activeTab === 'trending'}
-              onClick={() => handleTabClick('trending')}
-            >
-              TRENDING
-            </Tab>
-            <Tab
-              title='Popular Tab'
-              $isActive={activeTab === 'popular'}
-              onClick={() => handleTabClick('popular')}
-            >
-              POPULAR
-            </Tab>
-            <Tab
-              title='Top Rated Tab'
-              $isActive={activeTab === 'topRated'}
-              onClick={() => handleTabClick('topRated')}
-            >
-              TOP RATED
-            </Tab>
-          </TabContainer>
-          <div>
-            {activeTab === 'trending' &&
-              renderCardGrid(
-                state.trendingAnime,
-                state.loading.trending,
-                !!state.error,
-              )}
-            {activeTab === 'popular' &&
-              renderCardGrid(
-                state.popularAnime,
-                state.loading.popular,
-                !!state.error,
-              )}
-            {activeTab === 'topRated' &&
-              renderCardGrid(
-                state.topAnime,
-                state.loading.topRated,
-                !!state.error,
-              )}
-          </div>
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div
-            style={{
-              fontSize: '1.25rem',
-              fontWeight: 'bold',
-              padding: '0.75rem 0',
-            }}
-          >
-            TOP AIRING
-          </div>
-          <HomeSideBar animeData={state.topAiring} />
-          <div
-            style={{
-              fontSize: '1.25rem',
-              fontWeight: 'bold',
-              padding: '0.75rem 0',
-            }}
-          >
-            UPCOMING {SEASON}
-          </div>
-          <HomeSideBar animeData={state.Upcoming} />
-        </div>
-      </ContentSidebarLayout>
-      <EpisodeCard />
-    </SimpleLayout>
+
+      <Body>
+        <Main>
+          <EpisodeCard />
+          <LatestEpisodes items={data.recent} loading={loading} />
+        </Main>
+        <Side>
+          <HomeSideBar title='Top Airing' animeData={data.topAiring} loading={loading} />
+          <HomeSideBar title='Upcoming' animeData={data.upcoming} loading={loading} />
+        </Side>
+      </Body>
+
+      <Browse>
+        <BrowseHeader>
+          <h2>Browse</h2>
+          <Tabs role='tablist'>
+            {(
+              [
+                ['trending', 'Trending'],
+                ['popular', 'Popular'],
+                ['topRated', 'Top Rated'],
+              ] as [TabKey, string][]
+            ).map(([key, label]) => (
+              <Tab
+                key={key}
+                role='tab'
+                aria-selected={tab === key}
+                $active={tab === key}
+                onClick={() => setTab(key)}
+              >
+                {label}
+              </Tab>
+            ))}
+          </Tabs>
+        </BrowseHeader>
+        <PosterGrid>
+          {loading
+            ? Array.from({ length: 12 }, (_, i) => <PosterSkeleton key={i} />)
+            : browse.map((a) => {
+                const name = a.title.english || a.title.romaji || 'Untitled';
+                return (
+                  <Poster
+                    key={a.id}
+                    to={`/anime/${a.id}`}
+                    $color={a.color || undefined}
+                    title={name}
+                  >
+                    <div className='art'>
+                      <img src={a.image} alt={name} loading='lazy' />
+                      <div className='tags'>
+                        <span>{a.type ? a.type.replace('_', ' ') : ''}</span>
+                        {a.rating ? (
+                          <span>
+                            <FaRegStar /> {a.rating}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <p className='name'>{name}</p>
+                    <p className='sub'>
+                      {[a.releaseDate, a.totalEpisodes ? `${a.totalEpisodes} eps` : null]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </p>
+                  </Poster>
+                );
+              })}
+        </PosterGrid>
+      </Browse>
+    </Page>
   );
 };
 

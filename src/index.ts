@@ -15,6 +15,7 @@ export { default as CardItem } from './components/Cards/CardItem';
 export { EpisodeCard } from './components/Home/EpisodeCard';
 export { HomeCarousel } from './components/Home/HomeCarousel';
 export { HomeSideBar } from './components/Home/HomeSideBar';
+export { LatestEpisodes } from './components/Home/LatestEpisodes';
 
 // TODO Skeletons for Loading States
 export {

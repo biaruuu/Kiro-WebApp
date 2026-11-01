@@ -22,23 +22,29 @@ const slideDownAnimation2 = keyframes`
   100% { opacity: 1; transform: translateY(0); max-height: 500px; } /* Example max-height */
 `;
 
-const StyledNavbar = styled.div<{ $isExtended?: boolean }>`
+const StyledNavbar = styled.div<{ $isExtended?: boolean; $solid: boolean }>`
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
+  z-index: 100;
   text-align: center;
   margin: 0;
-  padding: 1rem;
-  background-color: var(--global-primary-bg-tr);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  z-index: 100;
-  animation: ${fadeInAnimation('var(--global-primary-bg-tr)')} 0.5s ease-out;
-  transition: 0.1s ease-in-out;
+  padding: calc(0.9rem + env(safe-area-inset-top)) 1.25rem 0.9rem;
+  background-color: ${({ $solid }) =>
+    $solid ? 'var(--global-primary-bg-tr)' : 'transparent'};
+  backdrop-filter: ${({ $solid }) => ($solid ? 'blur(14px)' : 'none')};
+  -webkit-backdrop-filter: ${({ $solid }) => ($solid ? 'blur(14px)' : 'none')};
+  border-bottom: 1px solid
+    ${({ $solid }) => ($solid ? 'var(--global-border)' : 'transparent')};
+  color: ${({ $solid }) => ($solid ? 'var(--global-text)' : '#fff')};
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease;
 
   @media (max-width: 500px) {
-    padding: 1rem 0.5rem;
+    padding-left: 1rem;
+    padding-right: 1rem;
   }
 `;
 
@@ -54,31 +60,34 @@ const TopContainer = styled.div`
   justify-content: space-between;
 `;
 
-const LogoImg = styled(Link)`
-  width: 7rem;
-  font-size: 1.2rem;
-  font-weight: bold;
+const LogoImg = styled(Link)<{ $solid: boolean }>`
+  font-size: 1.85rem;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 1;
   text-decoration: none;
-  color: var(--global-text);
-  content: var(--logo-text-transparent);
+  color: ${({ $solid }) => ($solid ? 'var(--global-text)' : '#fff')};
   cursor: pointer;
-  transition:
-    color 0.2s ease-in-out,
-    transform 0.2s ease-in-out;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
 
-  &:hover,
-  &:active,
-  &:focus {
-    color: black;
-    transform: scale(1.05);
+  small {
+    margin-left: 0.15rem;
+    font-size: 0.55rem;
+    font-weight: 700;
+    letter-spacing: 0;
+    vertical-align: baseline;
+    opacity: 0.8;
   }
-
+  &:hover {
+    opacity: 0.85;
+  }
   &:active {
-    transform: scale(0.95);
+    opacity: 0.7;
   }
 
   @media (max-width: 500px) {
-    max-width: 6rem;
+    font-size: 1.7rem;
   }
 `;
 
@@ -106,10 +115,10 @@ const InputContainer = styled.div<{ $isVisible: boolean }>`
 `;
 
 const RightContent = styled.div`
-  gap: 0.5rem;
+  gap: 0.25rem;
   display: flex;
   align-items: center;
-  height: 2rem;
+  height: auto;
 `;
 
 const Icon = styled.div<{ $isFocused: boolean }>`
@@ -165,31 +174,82 @@ const ClearButton = styled.button<{ $query: string }>`
   }
 `;
 
-const StyledButton = styled.button<{ isInputToggle?: boolean }>`
-  background: transparent;
-  background-color: var(--global-div);
-  color: var(--global-text);
-  font-size: 1.2rem;
-  cursor: pointer;
-  padding: 1.2rem 0.6rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--global-border-radius);
-  width: 100%;
-  height: 100%;
-  transition:
-    color 0.2s ease-in-out,
-    transform 0.1s ease-in-out;
+const StyledButton = styled.button<{ $solid?: boolean }>`
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  padding: 0;
   border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: ${({ $solid }) => ($solid ? 'var(--global-text)' : '#fff')};
+  font-size: 1.7rem;
+  cursor: pointer;
+  opacity: 0.85;
+  transition:
+    opacity 0.2s ease,
+    transform 0.1s ease,
+    background-color 0.2s ease;
 
+  &:hover {
+    opacity: 1;
+    background: rgba(128, 128, 128, 0.18);
+  }
   &:active {
     transform: scale(0.9);
   }
+`;
 
-  @media (max-width: 500px) {
+const MenuBackdrop = styled.button`
+  position: fixed;
+  inset: 0;
+  z-index: 99;
+  border: none;
+  background: rgba(0, 0, 0, 0.35);
+  cursor: default;
+`;
+
+const MenuPanel = styled.nav`
+  position: absolute;
+  top: calc(100% + 0.4rem);
+  right: 1rem;
+  z-index: 101;
+  width: min(18rem, calc(100vw - 2rem));
+  padding: 0.5rem;
+  text-align: left;
+  border-radius: 1.1rem;
+  border: 1px solid var(--global-border);
+  background: var(--global-secondary-bg);
+  color: var(--global-text);
+  box-shadow: 0 1.2rem 3rem rgba(0, 0, 0, 0.45);
+  animation: ${slideDownAnimation2} 0.2s ease;
+
+  a,
+  button {
     display: flex;
-    margin: ${({ isInputToggle }) => (isInputToggle ? '0' : '0')};
+    align-items: center;
+    gap: 0.7rem;
+    width: 100%;
+    padding: 0.85rem 0.9rem;
+    border: none;
+    border-radius: 0.7rem;
+    background: transparent;
+    color: inherit;
+    font-size: 1rem;
+    font-weight: 500;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+  }
+  a:hover,
+  button:hover {
+    background: var(--global-tertiary-bg);
+  }
+  hr {
+    margin: 0.4rem 0.5rem;
+    border: none;
+    border-top: 1px solid var(--global-border);
   }
 `;
 
@@ -253,6 +313,24 @@ export const Navbar = () => {
   });
   const [isInputVisible, setIsInputVisible] = useState(false); // Default to false
   const [isMobileView, setIsMobileView] = useState(window.innerWidth < 500);
+  const [scrolled, setScrolled] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  const isHome = location.pathname === '/' || location.pathname === '/home';
+  // Transparent over the home hero; solid everywhere else / once scrolled.
+  const solid =
+    !isHome || scrolled || menuOpen || isInputVisible || search.isDropdownOpen;
   const fetchSearchResults = async (query: string) => {
     if (!query.trim()) return;
 
@@ -458,15 +536,16 @@ export const Navbar = () => {
 
   return (
     <>
-      <StyledNavbar $isExtended={isPaddingExtended} ref={navbarRef}>
+      <StyledNavbar $isExtended={isPaddingExtended} $solid={solid} ref={navbarRef}>
         <NavbarWrapper>
           <TopContainer>
             <LogoImg
-              title='animallu'
+              title='AniMallu'
               to='/home'
+              $solid={solid}
               onClick={() => window.scrollTo(0, 0)}
             >
-              見るろ の 久遠
+              AniMallu
             </LogoImg>
 
             {/* Render InputContainer within the navbar for screens larger than 500px */}
@@ -519,6 +598,7 @@ export const Navbar = () => {
             <RightContent>
               {isMobileView && (
                 <StyledButton
+                  $solid={solid}
                   onClick={() => {
                     setIsInputVisible((prev) => !prev);
                     setIsPaddingExtended((prev) => !prev); // Toggle padding extension when toggling input visibility
@@ -528,13 +608,14 @@ export const Navbar = () => {
                   <IoIosSearch />
                 </StyledButton>
               )}
-              <StyledButton onClick={toggleTheme} aria-label='Toggle Dark Mode'>
-                {isDarkMode ? <FiSun /> : <FiMoon />}
+              <StyledButton
+                $solid={solid}
+                onClick={() => setMenuOpen((open) => !open)}
+                aria-label={menuOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={menuOpen}
+              >
+                {menuOpen ? <FiX /> : <FiMenu />}
               </StyledButton>
-              {/* {<StyledButton onClick={navigateToProfile}>
-                <FiMenu />
-              </StyledButton>
-              } */}
             </RightContent>
           </TopContainer>
 
@@ -580,7 +661,24 @@ export const Navbar = () => {
             </InputContainer>
           )}
         </NavbarWrapper>
+        {menuOpen && (
+          <MenuPanel aria-label='Main menu'>
+            <Link to='/home'>Home</Link>
+            <Link to='/search'>Browse &amp; Search</Link>
+            <Link to='/profile'>Settings</Link>
+            <Link to='/about'>About</Link>
+            <Link to='/pptos'>Privacy &amp; Terms</Link>
+            <hr />
+            <button onClick={toggleTheme}>
+              {isDarkMode ? <FiSun /> : <FiMoon />}{' '}
+              {isDarkMode ? 'Light mode' : 'Dark mode'}
+            </button>
+          </MenuPanel>
+        )}
       </StyledNavbar>
+      {menuOpen && (
+        <MenuBackdrop aria-label='Close menu' onClick={() => setMenuOpen(false)} />
+      )}
       {/* Conditionally render InputContainer below the navbar for mobile view when visibility is toggled */}
     </>
   );

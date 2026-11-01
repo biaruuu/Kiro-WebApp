@@ -54,6 +54,18 @@ export const DETAIL_QUERY = `
   query ($id: Int) { Media(id: $id, type: ANIME) { ${DETAIL_FIELDS} } }
 `;
 
+export const RECENT_QUERY = `
+  query ($page: Int, $perPage: Int, $before: Int, $after: Int) {
+    Page(page: $page, perPage: $perPage) {
+      airingSchedules(airingAt_lesser: $before, airingAt_greater: $after, sort: TIME_DESC) {
+        episode
+        airingAt
+        media { ${MEDIA_FIELDS} }
+      }
+    }
+  }
+`;
+
 export async function anilistRequest<T = any>(
   query: string,
   variables: Record<string, unknown>,
@@ -200,4 +212,22 @@ export function mapPage(data: any) {
     totalResults: page.pageInfo.total,
     results: page.media.map(mapMedia),
   };
+}
+
+// Recently aired episodes: one entry per anime (its newest episode),
+// each an Anime plus `episode` and `airingAt` (unix seconds).
+export function mapRecent(data: any) {
+  const seen = new Set<number>();
+  const out: any[] = [];
+  for (const entry of data?.Page?.airingSchedules ?? []) {
+    const media = entry.media;
+    if (!media || media.isAdult || seen.has(media.id)) continue;
+    seen.add(media.id);
+    out.push({
+      ...mapMedia(media),
+      episode: entry.episode,
+      airingAt: entry.airingAt,
+    });
+  }
+  return out;
 }

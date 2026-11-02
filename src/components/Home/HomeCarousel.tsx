@@ -21,7 +21,7 @@ const clamp = (n: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, n));
 const Hero = styled.section`
   position: relative;
   width: 100vw;
-  margin: -4rem 0 0 calc(50% - 50vw);
+  margin: -3.75rem 0 0 calc(50% - 50vw);
   height: min(80vh, 44rem);
   height: min(80svh, 44rem);
   min-height: 26rem;
@@ -30,7 +30,7 @@ const Hero = styled.section`
   user-select: none;
 
   @media (max-width: 500px) {
-    margin-top: -3.5rem;
+    margin-top: -3.25rem;
     height: min(76svh, 40rem);
   }
   @media (min-width: 1000px) {
@@ -201,14 +201,14 @@ const Chip = styled.span`
   padding: 0.3rem 0.75rem;
   border-radius: 999px;
   /* neutral dark glass (no saturation boost, so the art never tints the chip) */
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  background: rgba(22, 22, 28, 0.46);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.07);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   font-size: 0.72rem;
   font-weight: 400;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.82);
+  color: rgba(255, 255, 255, 0.78);
   white-space: nowrap;
 `;
 
@@ -248,7 +248,7 @@ const HeroButton = styled(Link)<{ $primary?: boolean }>`
   text-decoration: none;
   color: ${({ $primary }) => ($primary ? '#0b0b10' : '#fff')};
   background: ${({ $primary }) =>
-    $primary ? '#f5f5f5' : 'rgba(36, 36, 42, 0.7)'};
+    $primary ? '#f5f5f5' : 'rgba(40, 40, 46, 0.78)'};
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   transition:

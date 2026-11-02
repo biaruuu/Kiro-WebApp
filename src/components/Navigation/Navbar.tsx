@@ -30,11 +30,11 @@ const StyledNavbar = styled.div<{ $isExtended?: boolean; $solid: boolean }>`
   z-index: 100;
   text-align: center;
   margin: 0;
-  padding: calc(0.6rem + env(safe-area-inset-top)) 1.25rem 0.6rem;
+  padding: calc(0.45rem + env(safe-area-inset-top)) 1.25rem 0.45rem;
   background-color: ${({ $solid }) =>
     $solid ? 'var(--global-primary-bg-tr)' : 'transparent'};
-  backdrop-filter: ${({ $solid }) => ($solid ? 'blur(14px)' : 'none')};
-  -webkit-backdrop-filter: ${({ $solid }) => ($solid ? 'blur(14px)' : 'none')};
+  backdrop-filter: ${({ $solid }) => ($solid ? 'blur(10px)' : 'none')};
+  -webkit-backdrop-filter: ${({ $solid }) => ($solid ? 'blur(10px)' : 'none')};
   border-bottom: 1px solid
     ${({ $solid }) => ($solid ? 'var(--global-border)' : 'transparent')};
   color: ${({ $solid }) => ($solid ? 'var(--global-text)' : '#fff')};
@@ -45,6 +45,10 @@ const StyledNavbar = styled.div<{ $isExtended?: boolean; $solid: boolean }>`
   @media (max-width: 500px) {
     padding-left: 1rem;
     padding-right: 1rem;
+  }
+  @media (min-width: 700px) {
+    padding-top: calc(0.6rem + env(safe-area-inset-top));
+    padding-bottom: 0.6rem;
   }
 `;
 
@@ -61,7 +65,7 @@ const TopContainer = styled.div`
 `;
 
 const LogoImg = styled(Link)<{ $solid: boolean }>`
-  font-size: 1.5rem;
+  font-size: 1.3rem;
   font-weight: 800;
   letter-spacing: -0.04em;
   line-height: 1;
@@ -87,7 +91,7 @@ const LogoImg = styled(Link)<{ $solid: boolean }>`
   }
 
   @media (max-width: 500px) {
-    font-size: 1.4rem;
+    font-size: 1.25rem;
   }
 `;
 
@@ -177,16 +181,16 @@ const ClearButton = styled.button<{ $query: string }>`
 const StyledButton = styled.button<{ $solid?: boolean }>`
   display: grid;
   place-items: center;
-  width: 2.4rem;
-  height: 2.4rem;
+  width: 2.1rem;
+  height: 2.1rem;
   padding: 0;
   border: none;
   border-radius: 50%;
   background: transparent;
   color: ${({ $solid }) => ($solid ? 'var(--global-text)' : '#fff')};
-  font-size: 1.4rem;
+  font-size: 1.2rem;
   cursor: pointer;
-  opacity: 0.85;
+  opacity: 0.8;
   transition:
     opacity 0.2s ease,
     transform 0.1s ease,

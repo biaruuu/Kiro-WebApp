@@ -27,7 +27,7 @@ const Btn = styled.button<{ $on: boolean; $variant: 'overlay' | 'hero'; $color: 
           width: 2.5rem;
           height: 2.5rem;
           border-radius: 0.5rem;
-          background: rgba(36, 36, 42, 0.7);
+          background: rgba(40, 40, 46, 0.78);
           backdrop-filter: blur(10px);
           -webkit-backdrop-filter: blur(10px);
           &:hover {
@@ -36,18 +36,22 @@ const Btn = styled.button<{ $on: boolean; $variant: 'overlay' | 'hero'; $color: 
         `
       : css`
           position: absolute;
-          top: 0.45rem;
-          right: 0.45rem;
+          top: 0.4rem;
+          right: 0.4rem;
           z-index: 3;
-          width: 1.9rem;
-          height: 1.9rem;
+          width: 1.7rem;
+          height: 1.7rem;
           border-radius: 50%;
           color: ${$color};
-          background: rgba(14, 14, 20, 0.88);
-          border: 1px solid rgba(255, 255, 255, 0.12);
-          box-shadow: 0 0.15rem 0.6rem rgba(0, 0, 0, 0.4);
+          background: rgba(10, 10, 14, 0.66);
           &:hover {
-            background: rgba(14, 14, 20, 0.98);
+            background: rgba(10, 10, 14, 0.9);
+          }
+          @media (min-width: 700px) {
+            top: 0.55rem;
+            right: 0.55rem;
+            width: 2rem;
+            height: 2rem;
           }
         `}
 
@@ -61,8 +65,8 @@ const Btn = styled.button<{ $on: boolean; $variant: 'overlay' | 'hero'; $color: 
     `}
 
   svg {
-    width: 55%;
-    height: 55%;
+    width: 52%;
+    height: 52%;
     overflow: visible;
   }
   .plus {
@@ -135,7 +139,7 @@ export const ListButton = ({
         toggle(item);
       }}
     >
-      <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.6' strokeLinecap='round' strokeLinejoin='round'>
+      <svg viewBox='0 0 24 24' fill='none' stroke='currentColor' strokeWidth='2.2' strokeLinecap='round' strokeLinejoin='round'>
         <g className='plus'>
           <path d='M12 5v14M5 12h14' />
         </g>

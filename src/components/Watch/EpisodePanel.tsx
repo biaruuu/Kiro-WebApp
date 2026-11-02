@@ -8,7 +8,7 @@ const Panel = styled.aside`
   flex-direction: column;
   background: var(--global-secondary-bg);
   border: 1px solid var(--global-border);
-  border-radius: calc(var(--global-border-radius) * 2);
+  border-radius: 1rem;
   overflow: hidden;
   min-height: 0;
 `;
@@ -203,6 +203,14 @@ const Empty = styled.p`
   font-size: 0.9rem;
 `;
 
+const fmtDate = (iso?: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime())
+    ? ''
+    : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
 const RANGE_SIZE = 50;
 
 type Props = {
@@ -357,7 +365,11 @@ export default function EpisodePanel({
                 <div className='meta'>
                   <strong>{ep.title || `Episode ${ep.number}`}</strong>
                   <span>
-                    {[ep.airDate, ep.duration ? `${ep.duration}m` : null, ep.filler ? 'Filler' : null]
+                    {[
+                      fmtDate(ep.airDate),
+                      ep.duration ? `${ep.duration > 300 ? Math.round(ep.duration / 60) : Math.round(ep.duration)}m` : null,
+                      ep.filler ? 'Filler' : null,
+                    ]
                       .filter(Boolean)
                       .join(' · ')}
                   </span>

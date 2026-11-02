@@ -3,9 +3,11 @@
 //
 // Stream providers require a specific Referer header, which browsers will not
 // let a page set. The player therefore requests
-//   /api/stream?url=<encoded upstream url>&ref=<encoded referer>
-// and this function fetches the upstream with the right headers. HLS playlists
-// are rewritten so every segment / key / sub-playlist also goes through here.
+//   /api/stream?t=<sealed token>
+// where the token (minted by /api/src, AES-GCM sealed) holds the upstream url
+// and referer, so neither ever appears in the browser. HLS playlists are
+// rewritten so every segment / key / sub-playlist also goes through here as a
+// fresh token.
 //
 // Abuse protection: only requests coming from this same site are served, and
 // private / loopback / IP-literal hosts are refused.
@@ -34,11 +36,60 @@ function isBlockedHost(hostname: string): boolean {
   return false;
 }
 
-function proxied(absUrl: string, ref: string): string {
-  return `/api/stream?url=${encodeURIComponent(absUrl)}&ref=${encodeURIComponent(ref)}`;
+// --- token sealing (must match api/src.ts) ----------------------------------
+const SECRET = process.env.SRC_SECRET?.trim() || 'animallu-private-gateway-v1';
+const enc = new TextEncoder();
+const dec = new TextDecoder();
+
+const toB64 = (buf: Uint8Array) => {
+  let s = '';
+  for (const b of buf) s += String.fromCharCode(b);
+  return btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+};
+const fromB64 = (str: string) => {
+  const p = str.replace(/-/g, '+').replace(/_/g, '/');
+  const s = atob(p + '='.repeat((4 - (p.length % 4)) % 4));
+  return Uint8Array.from(s, (c) => c.charCodeAt(0));
+};
+
+let keyPromise: Promise<CryptoKey> | null = null;
+const getKey = () =>
+  (keyPromise ??= crypto.subtle
+    .digest('SHA-256', enc.encode(`src:${SECRET}`))
+    .then((h) => crypto.subtle.importKey('raw', h, 'AES-GCM', false, ['encrypt', 'decrypt'])));
+
+async function seal(payload: unknown): Promise<string> {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const data = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    await getKey(),
+    enc.encode(JSON.stringify(payload)),
+  );
+  const out = new Uint8Array(iv.length + data.byteLength);
+  out.set(iv);
+  out.set(new Uint8Array(data), iv.length);
+  return toB64(out);
 }
 
-function rewritePlaylist(text: string, baseUrl: string, ref: string): string {
+async function open(token: string): Promise<{ u?: string; r?: string } | null> {
+  try {
+    const raw = fromB64(token);
+    const data = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: raw.slice(0, 12) },
+      await getKey(),
+      raw.slice(12),
+    );
+    return JSON.parse(dec.decode(data));
+  } catch {
+    return null;
+  }
+}
+
+async function proxied(absUrl: string, ref: string): Promise<string> {
+  return `/api/stream?t=${await seal({ u: absUrl, r: ref })}`;
+}
+
+async function rewritePlaylist(text: string, baseUrl: string, ref: string): Promise<string> {
   const resolve = (u: string) => {
     try {
       return new URL(u, baseUrl).toString();
@@ -46,20 +97,24 @@ function rewritePlaylist(text: string, baseUrl: string, ref: string): string {
       return u;
     }
   };
-  return text
-    .split(/\r?\n/)
-    .map((line) => {
+  const lines = await Promise.all(
+    text.split(/\r?\n/).map(async (line) => {
       const trimmed = line.trim();
       if (!trimmed) return line;
       if (trimmed.startsWith('#')) {
         // Tags that carry a URI="..." attribute (keys, maps, media, ...)
-        return line.replace(/URI="([^"]+)"/g, (_m, uri) => {
-          return `URI="${proxied(resolve(uri), ref)}"`;
-        });
+        const uris = [...line.matchAll(/URI="([^"]+)"/g)];
+        if (!uris.length) return line;
+        let out = line;
+        for (const m of uris) {
+          out = out.replace(m[0], `URI="${await proxied(resolve(m[1]), ref)}"`);
+        }
+        return out;
       }
       return proxied(resolve(trimmed), ref);
-    })
-    .join('\n');
+    }),
+  );
+  return lines.join('\n');
 }
 
 export default async function handler(req: Request): Promise<Response> {
@@ -75,9 +130,12 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response('Forbidden', { status: 403 });
   }
 
-  const target = self.searchParams.get('url');
-  const ref = self.searchParams.get('ref') || '';
-  if (!target) return new Response('Missing url', { status: 400 });
+  const token = self.searchParams.get('t');
+  if (!token) return new Response('Missing token', { status: 400 });
+  const opened = await open(token);
+  const target = opened?.u;
+  const ref = opened?.r || '';
+  if (!target) return new Response('Invalid token', { status: 400 });
 
   let upstream: URL;
   try {
@@ -118,7 +176,7 @@ export default async function handler(req: Request): Promise<Response> {
   if (looksLikePlaylist && res.ok) {
     const text = await res.text();
     if (text.trimStart().startsWith('#EXTM3U')) {
-      return new Response(rewritePlaylist(text, res.url || upstream.toString(), ref), {
+      return new Response(await rewritePlaylist(text, res.url || upstream.toString(), ref), {
         status: 200,
         headers: {
           'Content-Type': 'application/vnd.apple.mpegurl',

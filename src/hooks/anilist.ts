@@ -10,6 +10,7 @@ const COVER = 'coverImage { extraLarge large color }';
 
 const MINI_MEDIA = `
   id idMal type ${TITLE} status episodes format averageScore ${COVER} bannerImage
+  seasonYear startDate { year }
 `;
 
 const MEDIA_FIELDS = `
@@ -118,6 +119,7 @@ const mapMini = (m: any, extra: Record<string, unknown> = {}) => ({
   coverHash: '',
   rating: m.averageScore ?? null,
   type: m.format ?? '',
+  releaseDate: m.seasonYear ?? m.startDate?.year ?? null,
   ...extra,
 });
 

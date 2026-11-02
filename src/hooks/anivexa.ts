@@ -1,19 +1,17 @@
-// Client for the Anivexa streaming API (https://github.com/walterwhite-69/Anivexa-API).
+// Client for our private streaming gateway (api/src.ts).
 //
-//   GET /episodes/:anilistId                      -> per-provider episode lists (sub + dub)
-//   GET /watch/:provider/:anilistId/:audio/:ep-id -> streams (hls | mp4 | embed), subtitles, skip times
+// The browser only ever talks to this site's /api/src: provider names are
+// invented there, episode ids / media URLs are sealed tokens, and the upstream
+// streaming API is never exposed.
 //
-// Everything is keyed by AniList id, which is exactly what the catalog uses.
+//   /api/src?k=eps&id=<anilistId>   -> per-provider episode lists (sub + dub)
+//   /api/src?k=watch&t=<token>      -> streams, subtitles, skip times
+//   /api/src?k=map&id=<anilistId>   -> cross-site ids
 
 export type Audio = 'sub' | 'dub';
 
-const STREAM_API = (
-  (import.meta.env.VITE_STREAM_API as string | undefined)?.trim() ||
-  'https://anibiartv-api.vercel.app'
-).replace(/\/+$/, '');
-
 export interface StreamEpisode {
-  id: string; // e.g. "watch/anikoto/16498/sub/anikoto-1"
+  id: string; // sealed token (opaque)
   number: number;
   title: string | null;
   description: string | null;
@@ -45,7 +43,6 @@ export interface StreamSource {
   url: string;
   type: 'hls' | 'mp4' | 'embed' | string;
   server: string;
-  referer?: string;
   quality?: string;
   priority?: number;
   isActive?: boolean;
@@ -62,34 +59,15 @@ export interface WatchData {
   audio: Audio;
   streams: StreamSource[];
   subtitles: SubtitleTrack[];
-  downloads: { url: string; label: string }[];
-  headers?: Record<string, string>;
 }
 
-// Providers in the order we prefer to try them.
-export const PROVIDER_PRIORITY = [
-  'anikoto',
-  'animegg',
-  'mkissa',
-  'aniwaves',
-  'animenosub',
-  'senshi',
-  'kaa',
-  'anizone',
-  'animeonsen',
-  'anipm',
-  'animedunya',
-  'reanime',
-];
-
-const NON_PROVIDER_KEYS = new Set(['page', 'type', 'mappings']);
 
 // --- tiny sessionStorage cache --------------------------------------------
 const CACHE_TTL = 10 * 60 * 1000;
 
 function cacheGet<T>(key: string): T | undefined {
   try {
-    const raw = sessionStorage.getItem(`anivexa:${key}`);
+    const raw = sessionStorage.getItem(`gw1:${key}`);
     if (!raw) return undefined;
     const { t, v } = JSON.parse(raw);
     if (Date.now() - t < CACHE_TTL) return v as T;
@@ -102,7 +80,7 @@ function cacheGet<T>(key: string): T | undefined {
 function cacheSet(key: string, value: unknown) {
   try {
     sessionStorage.setItem(
-      `anivexa:${key}`,
+      `gw1:${key}`,
       JSON.stringify({ t: Date.now(), v: value }),
     );
   } catch {
@@ -111,26 +89,13 @@ function cacheSet(key: string, value: unknown) {
 }
 
 // --- fetching ---------------------------------------------------------------
-// Try the API directly first (it sends CORS headers); if the browser blocks it,
-// retry through the same-origin /api/json proxy.
-async function getJson(path: string, timeoutMs = 25000): Promise<any> {
-  const url = `${STREAM_API}/${path.replace(/^\/+/, '')}`;
-  const attempt = async (target: string) => {
-    const res = await fetch(target, {
-      signal: AbortSignal.timeout(timeoutMs),
-      headers: { Accept: 'application/json' },
-    });
-    if (!res.ok) throw new Error(`Stream API error ${res.status}`);
-    return res.json();
-  };
-  try {
-    return await attempt(url);
-  } catch (err) {
-    if (err instanceof TypeError || (err as any)?.name === 'TimeoutError') {
-      return attempt(`/api/json?url=${encodeURIComponent(url)}`);
-    }
-    throw err;
-  }
+async function getJson(query: string, timeoutMs = 28000): Promise<any> {
+  const res = await fetch(`/api/src?${query}`, {
+    signal: AbortSignal.timeout(timeoutMs),
+    headers: { Accept: 'application/json' },
+  });
+  if (!res.ok) throw new Error(res.status === 404 ? 'Not found' : 'Source unavailable');
+  return res.json();
 }
 
 const cleanEpisodes = (list: any): StreamEpisode[] =>
@@ -153,7 +118,7 @@ export async function fetchMap(anilistId: string): Promise<any> {
   const key = `map:${anilistId}`;
   const cached = cacheGet<any>(key);
   if (cached) return cached;
-  const data = await getJson(`map/${anilistId}`, 12000);
+  const data = await getJson(`k=map&id=${encodeURIComponent(anilistId)}`, 12000);
   if (data) cacheSet(key, data);
   return data;
 }
@@ -166,19 +131,15 @@ export async function fetchProviderEpisodes(
   const cached = cacheGet<ProviderEpisodes[]>(key);
   if (cached) return cached;
 
-  const data = await getJson(`episodes/${anilistId}`);
+  const data = await getJson(`k=eps&id=${encodeURIComponent(anilistId)}`, 28000);
   const providers: ProviderEpisodes[] = [];
   for (const [name, value] of Object.entries<any>(data ?? {})) {
-    if (NON_PROVIDER_KEYS.has(name) || !value || value.error) continue;
+    if (!value || value.error) continue;
     const sub = cleanEpisodes(value.episodes?.sub);
     const dub = cleanEpisodes(value.episodes?.dub);
     if (sub.length || dub.length) providers.push({ provider: name, sub, dub });
   }
-  providers.sort((a, b) => {
-    const ia = PROVIDER_PRIORITY.indexOf(a.provider);
-    const ib = PROVIDER_PRIORITY.indexOf(b.provider);
-    return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib);
-  });
+  // the gateway already returns providers in preference order
   if (providers.length) cacheSet(key, providers);
   return providers;
 }
@@ -187,15 +148,13 @@ export async function fetchProviderEpisodes(
 export async function fetchWatch(episodeId: string): Promise<WatchData> {
   const cached = cacheGet<WatchData>(`watch:${episodeId}`);
   if (cached) return cached;
-  const data = await getJson(episodeId);
+  const data = await getJson(`k=watch&t=${encodeURIComponent(episodeId)}`);
   const result: WatchData = {
     anilistId: data.anilistId,
     episode: data.episode,
     audio: data.audio,
     streams: Array.isArray(data.streams) ? data.streams : [],
     subtitles: Array.isArray(data.subtitles) ? data.subtitles : [],
-    downloads: Array.isArray(data.downloads) ? data.downloads : [],
-    headers: data.headers,
   };
   // Stream URLs are signed/expiring, so only cache briefly via the shared TTL.
   cacheSet(`watch:${episodeId}`, result);
@@ -203,13 +162,6 @@ export async function fetchWatch(episodeId: string): Promise<WatchData> {
 }
 
 // --- helpers used by the player ---------------------------------------------
-
-/** Route a media / subtitle URL through our edge proxy so the right Referer is sent. */
-export function proxyMedia(url: string, referer?: string): string {
-  return `/api/stream?url=${encodeURIComponent(url)}${
-    referer ? `&ref=${encodeURIComponent(referer)}` : ''
-  }`;
-}
 
 /** Playable servers in the order they should be tried: native video first, embeds last. */
 export function orderStreams(streams: StreamSource[]): StreamSource[] {

@@ -17,7 +17,6 @@ import {
 import { FaForward, FaServer } from 'react-icons/fa';
 import {
   orderStreams,
-  proxyMedia,
   type StreamSource,
   type WatchData,
 } from '../../../hooks/anivexa';
@@ -33,8 +32,12 @@ const Stage = styled.div`
   width: 100%;
   aspect-ratio: 16 / 9;
   background: #000;
-  border-radius: var(--global-border-radius);
+  border-radius: 0;
   overflow: hidden;
+
+  @media (min-width: 700px) {
+    border-radius: 0.9rem;
+  }
 
   .player {
     width: 100%;
@@ -108,8 +111,9 @@ const ServerBar = styled.div`
   align-items: center;
   flex-wrap: wrap;
   gap: 0.5rem;
-  margin-top: 0.75rem;
-  font-size: 0.8rem;
+  margin-top: 0.6rem;
+  padding: 0 0.4rem;
+  font-size: 0.78rem;
   color: var(--global-text-muted);
 
   svg {
@@ -312,7 +316,7 @@ export default function StreamPlayer({
         className='player'
         title={title}
         src={
-          { src: proxyMedia(current.url, current.referer), type: mediaType } as any
+          { src: current.url, type: mediaType } as any
         }
         autoplay={autoPlay}
         crossorigin
@@ -334,7 +338,7 @@ export default function StreamPlayer({
           {tracks.map((t, i) => (
             <Track
               key={t.url}
-              src={proxyMedia(t.url, current.referer)}
+              src={t.url}
               kind='subtitles'
               label={t.label}
               lang={t.srclang || 'en'}
@@ -368,7 +372,7 @@ export default function StreamPlayer({
         )}
       </Stage>
 
-      {servers.length > 0 && (
+      {servers.length > 1 && (
         <ServerBar>
           <FaServer />
           Servers:
@@ -385,7 +389,7 @@ export default function StreamPlayer({
                 });
                 setIndex(i);
               }}
-              title={`${s.server} (${s.type})`}
+              title={s.server}
             >
               {s.server}
               {s.type === 'embed' ? ' · embed' : s.quality ? ` · ${s.quality}` : ''}

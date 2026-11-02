@@ -15,7 +15,9 @@ const TMDB = 'https://api.themoviedb.org/3';
 const IMG = 'https://image.tmdb.org/t/p';
 
 const STREAM_API = (
-  process.env.VITE_STREAM_API?.trim() || 'https://anibiartv-api.vercel.app'
+  process.env.STREAM_API?.trim() ||
+    process.env.VITE_STREAM_API?.trim() ||
+    'https://anibiartv-api.vercel.app'
 ).replace(/\/+$/, '');
 
 type Kind = 'tv' | 'movie';

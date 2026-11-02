@@ -495,7 +495,7 @@ export default function Watch() {
         titleRomaji: anime?.title?.romaji,
         totalEpisodes: anime?.totalEpisodes,
       },
-      { ...currentEp, image: currentEp.image || anime?.image },
+      { ...currentEp, image: currentEp.image || anime?.cover || anime?.image },
     );
     setWatchedTick((n) => n + 1);
   }, [currentEp?.number, anime?.id]); // eslint-disable-line react-hooks/exhaustive-deps

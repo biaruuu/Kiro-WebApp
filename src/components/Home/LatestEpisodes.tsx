@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
 import { FaChevronLeft, FaChevronRight, FaClosedCaptioning, FaMicrophone, FaPlay } from 'react-icons/fa';
@@ -254,15 +254,38 @@ const Card = styled(Link)<{ $color?: string }>`
     color: ${({ $color }) => $color || 'var(--primary-accent)'};
   }
 
-  /* + button: revealed on hover for mouse users (always visible on touch) */
+  /* no text selection / image menu while long-pressing */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  .poster img {
+    -webkit-user-drag: none;
+    pointer-events: none;
+  }
+
+  /* + button: hidden until hover (mouse) or long-press (touch); always visible once added */
+  .poster > button {
+    opacity: 0;
+    pointer-events: none;
+    transform: scale(0.8);
+    transition:
+      opacity 0.2s ease,
+      transform 0.2s ease,
+      background-color 0.25s ease,
+      color 0.25s ease;
+  }
+  .poster > button[aria-pressed='true'],
+  .poster > button[data-show='true'] {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
+  }
   @media (hover: hover) {
-    .poster > button:not([aria-pressed='true']) {
-      opacity: 0;
-      transition: opacity 0.2s ease;
-    }
     &:hover .poster > button,
     .poster > button:focus-visible {
       opacity: 1;
+      pointer-events: auto;
+      transform: none;
     }
   }
 
@@ -352,6 +375,42 @@ const typeLabel = (t?: string) => {
 const EpisodeTile = ({ a, audio }: { a: RecentAnime; audio: Audio }) => {
   const name = a.title.english || a.title.romaji || 'Untitled';
   const counts = useAudioCounts(a.id);
+  const ref = useRef<HTMLAnchorElement>(null);
+  const [reveal, setReveal] = useState(false);
+  const timer = useRef<number>();
+  const longPressed = useRef(false);
+
+  const startPress = () => {
+    longPressed.current = false;
+    window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => {
+      longPressed.current = true;
+      setReveal(true);
+      try {
+        navigator.vibrate?.(12);
+      } catch {
+        /* ignore */
+      }
+    }, 420);
+  };
+  const endPress = () => window.clearTimeout(timer.current);
+
+  // hide again after a few seconds, or when touching anywhere else
+  useEffect(() => {
+    if (!reveal) return;
+    const hide = window.setTimeout(() => setReveal(false), 4500);
+    const onOutside = (e: TouchEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setReveal(false);
+    };
+    document.addEventListener('touchstart', onOutside, { passive: true });
+    return () => {
+      window.clearTimeout(hide);
+      document.removeEventListener('touchstart', onOutside);
+    };
+  }, [reveal]);
+
+  useEffect(() => () => window.clearTimeout(timer.current), []);
+
   // Dub tab: only shows that do have a dub (once we know).
   if (audio === 'dub' && counts && counts.dub === 0) return null;
 
@@ -359,16 +418,31 @@ const EpisodeTile = ({ a, audio }: { a: RecentAnime; audio: Audio }) => {
   const dub = counts?.dub || 0;
   return (
     <Card
+      ref={ref}
       to={`/watch/${a.id}?ep=${a.episode}&audio=${audio}`}
       $color={a.color || undefined}
       title={`${name} - Episode ${a.episode}`}
+      onTouchStart={startPress}
+      onTouchEnd={endPress}
+      onTouchMove={endPress}
+      onTouchCancel={endPress}
+      onContextMenu={(e) => {
+        if (longPressed.current) e.preventDefault();
+      }}
+      onClick={(e) => {
+        // a long-press only reveals the + button, it must not open the episode
+        if (longPressed.current) {
+          e.preventDefault();
+          longPressed.current = false;
+        }
+      }}
     >
       <div className='poster'>
         <img src={a.image} alt={name} loading='lazy' decoding='async' />
         <span className='play'>
           <FaPlay />
         </span>
-        <ListButton anime={a} />
+        <ListButton anime={a} show={reveal} />
         <div className='overlay'>
           <span>EP {a.episode}</span>
           <small>{timeAgo(a.airingAt)}</small>

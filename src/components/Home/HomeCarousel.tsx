@@ -87,31 +87,34 @@ const LayerDim = styled.div`
   opacity: var(--hero-d, 0);
 `;
 
+// All gradients live in the fixed layer (nothing scrolls with an edge), so there
+// is no visible seam where the hero ends: the art simply darkens toward the
+// bottom and keeps showing, dimmed, behind the page content.
 const LayerFade = styled.div`
   position: absolute;
   inset: 0;
-  background: linear-gradient(
-    to bottom,
-    transparent 35%,
-    var(--global-primary-bg) 82%
-  );
-`;
-
-// legibility gradients for the hero text (scrolls away with the hero)
-const Shade = styled.div`
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
   background:
+    linear-gradient(to bottom, rgba(11, 11, 16, 0.6) 0%, transparent 16%),
     linear-gradient(
-      to top,
-      var(--global-primary-bg) 0%,
-      rgba(11, 11, 16, 0.72) 24%,
-      rgba(11, 11, 16, 0.08) 58%,
-      rgba(11, 11, 16, 0.45) 100%
-    ),
-    linear-gradient(to right, rgba(11, 11, 16, 0.55) 0%, transparent 60%);
+      to bottom,
+      transparent 24%,
+      rgba(11, 11, 16, 0.5) 46%,
+      rgba(11, 11, 16, 0.84) 68%,
+      var(--global-primary-bg) 96%
+    );
+
+  @media (min-width: 900px) {
+    background:
+      linear-gradient(to bottom, rgba(11, 11, 16, 0.6) 0%, transparent 16%),
+      linear-gradient(to right, rgba(11, 11, 16, 0.65) 0%, transparent 62%),
+      linear-gradient(
+        to bottom,
+        transparent 30%,
+        rgba(11, 11, 16, 0.55) 56%,
+        rgba(11, 11, 16, 0.86) 76%,
+        var(--global-primary-bg) 98%
+      );
+  }
 `;
 
 const Slide = styled.div<{ $active: boolean }>`
@@ -189,15 +192,21 @@ const Chip = styled.span`
   align-items: center;
   padding: 0.3rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: rgba(24, 24, 32, 0.38);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.16),
+    rgba(255, 255, 255, 0.05)
+  );
+  backdrop-filter: blur(18px) saturate(170%);
+  -webkit-backdrop-filter: blur(18px) saturate(170%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.18),
+    0 0.2rem 0.8rem rgba(0, 0, 0, 0.18);
   font-size: 0.72rem;
   font-weight: 400;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 255, 255, 0.88);
   white-space: nowrap;
 `;
 
@@ -236,11 +245,11 @@ const HeroButton = styled(Link)<{ $primary?: boolean }>`
   text-decoration: none;
   color: ${({ $primary }) => ($primary ? '#0b0b10' : '#fff')};
   background: ${({ $primary }) =>
-    $primary ? '#f5f5f5' : 'rgba(58, 58, 66, 0.62)'};
-  border: 1px solid
-    ${({ $primary }) => ($primary ? 'transparent' : 'rgba(255, 255, 255, 0.08)')};
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+    $primary ? '#f5f5f5' : 'rgba(52, 52, 60, 0.62)'};
+  box-shadow: ${({ $primary }) =>
+    $primary ? 'none' : 'inset 0 1px 0 rgba(255, 255, 255, 0.08)'};
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
   transition:
     transform 0.15s ease,
     background-color 0.2s ease;
@@ -388,7 +397,11 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
     const art = arts[a.id];
     if (art === undefined && !settled) return null; // still waiting for TMDB
     if (art?.backdrop && !failed[a.id]) return art.backdrop;
-    return a.cover || a.image || null;
+    // No HD backdrop: a wide 1900x400 banner would be zoomed ~4x on a portrait
+    // phone, so use the (taller) poster there instead.
+    const portrait =
+      typeof window !== 'undefined' && window.innerHeight > window.innerWidth;
+    return (portrait ? a.image || a.cover : a.cover || a.image) || null;
   };
 
   return (
@@ -420,8 +433,6 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
         <LayerDim />
         <LayerFade />
       </Layer>
-      <Shade />
-
       {slides.map((anime, i) => {
         const active = i === pos.cur;
         const art = arts[anime.id];

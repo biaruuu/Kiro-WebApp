@@ -71,13 +71,20 @@ const LayerImg = styled.img<{ $on: boolean }>`
   object-position: center 22%;
   opacity: ${({ $on }) => ($on ? 1 : 0)};
   transition: opacity 0.9s ease;
-  filter: blur(var(--hero-b, 0px));
-  transform: scale(var(--hero-s, 1));
-  will-change: filter, transform;
 
   @media (max-width: 700px) {
     object-position: 60% center;
   }
+`;
+
+// Pre-blurred copy of the art. Its blur is static (painted once); scrolling only
+// changes its opacity, which the GPU does for free -> smooth scrolling.
+const LayerBlur = styled(LayerImg)`
+  opacity: calc(var(--hero-b, 0) * 1);
+  transition: none;
+  filter: blur(20px);
+  transform: translateZ(0) scale(1.12);
+  will-change: opacity;
 `;
 
 const LayerDim = styled.div`
@@ -370,11 +377,11 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
       raf = 0;
       const y = window.scrollY;
       const vh = window.innerHeight || 800;
-      const blurP = clamp(y / (vh * 0.9));
+      // sharp at rest; only starts to blur once the user actually scrolls
+      const blurP = clamp((y - vh * 0.04) / (vh * 0.7));
       const fadeP = clamp((y - vh * 0.2) / (vh * 1.1));
       const eased = fadeP * fadeP * (3 - 2 * fadeP);
-      el.style.setProperty('--hero-b', `${(blurP * 14).toFixed(1)}px`);
-      el.style.setProperty('--hero-s', (1 + blurP * 0.06).toFixed(3));
+      el.style.setProperty('--hero-b', blurP.toFixed(3));
       el.style.setProperty('--hero-d', (clamp(y / (vh * 0.7)) * 0.5).toFixed(3));
       el.style.setProperty('--hero-o', (1 - eased).toFixed(3));
     };
@@ -430,6 +437,11 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
             />
           );
         })}
+        {(() => {
+          const cur = slides[pos.cur];
+          const src = cur ? srcFor(cur) : null;
+          return src ? <LayerBlur key={`b:${cur.id}:${src}`} src={src} alt='' $on /> : null;
+        })()}
         <LayerDim />
         <LayerFade />
       </Layer>

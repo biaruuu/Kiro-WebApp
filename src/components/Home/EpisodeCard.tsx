@@ -118,6 +118,8 @@ const Card = styled(Link)<{ $wrap: boolean }>`
   flex: 0 0 ${({ $wrap }) => ($wrap ? 'auto' : 'min(68vw, 18rem)')};
   scroll-snap-align: start;
   display: block;
+  min-width: 0;
+  max-width: 100%;
   text-decoration: none;
   color: var(--global-text);
 

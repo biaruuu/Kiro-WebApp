@@ -44,13 +44,11 @@ const Btn = styled.button<{ $on: boolean; $variant: 'overlay' | 'hero'; $color: 
           height: 1.9rem;
           border-radius: 50%;
           color: ${$color};
-          background: rgba(14, 14, 20, 0.78);
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          box-shadow: 0 0.15rem 0.6rem rgba(0, 0, 0, 0.35);
-          backdrop-filter: blur(8px) saturate(140%);
-          -webkit-backdrop-filter: blur(8px) saturate(140%);
+          background: rgba(14, 14, 20, 0.88);
+          border: 1px solid rgba(255, 255, 255, 0.12);
+          box-shadow: 0 0.15rem 0.6rem rgba(0, 0, 0, 0.4);
           &:hover {
-            background: rgba(14, 14, 20, 0.95);
+            background: rgba(14, 14, 20, 0.98);
           }
         `}
 

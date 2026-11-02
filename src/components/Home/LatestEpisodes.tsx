@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
-import { FaChevronLeft, FaChevronRight, FaClosedCaptioning, FaMicrophone, FaPlay } from 'react-icons/fa';
+import { FaClosedCaptioning, FaMicrophone, FaPlay } from 'react-icons/fa';
+import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
 import { useAudioCounts } from '../../hooks/extras';
 import { ListButton } from './ListButton';
 import type { Anime } from '../../hooks/interface';
@@ -67,30 +68,55 @@ const Controls = styled.div`
   flex: none;
 `;
 
-const Segment = styled.div`
-  display: inline-flex;
-  padding: 0.2rem;
+const ring = 'color-mix(in srgb, var(--global-text) 28%, transparent)';
+
+// Sub / Dub switch with a sliding pill
+const Segment = styled.div<{ $dub: boolean }>`
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  height: 1.85rem;
+  padding: 0.16rem;
   border-radius: 999px;
-  border: 1px solid var(--global-border);
+  border: 1.5px solid ${ring};
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0.16rem;
+    bottom: 0.16rem;
+    left: 0.16rem;
+    width: calc(50% - 0.16rem);
+    border-radius: 999px;
+    background: #b7a9ff;
+    transform: translateX(${({ $dub }) => ($dub ? '100%' : '0')});
+    transition: transform 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  @media (min-width: 700px) {
+    height: 2.2rem;
+  }
 `;
 
 const SegButton = styled.button<{ $active: boolean }>`
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
   min-width: 2.7rem;
-  padding: 0.32rem 0.7rem;
+  padding: 0 0.7rem;
   border: none;
   border-radius: 999px;
+  background: transparent;
   font-size: 0.74rem;
   font-weight: 600;
   cursor: pointer;
   color: ${({ $active }) => ($active ? '#0b0b10' : 'var(--global-text)')};
-  background: ${({ $active }) => ($active ? '#b7a9ff' : 'transparent')};
-  transition:
-    background-color 0.2s ease,
-    color 0.2s ease;
+  transition: color 0.25s ease;
+  -webkit-tap-highlight-color: transparent;
 
   @media (min-width: 700px) {
     min-width: 3.4rem;
-    padding: 0.45rem 0.95rem;
+    padding: 0 0.95rem;
     font-size: 0.86rem;
   }
 `;
@@ -98,21 +124,24 @@ const SegButton = styled.button<{ $active: boolean }>`
 const Pager = styled.div`
   display: inline-flex;
   align-items: center;
-  padding: 0.2rem;
+  height: 1.85rem;
+  padding: 0 0.1rem;
   border-radius: 999px;
-  border: 1px solid var(--global-border);
+  border: 1.5px solid ${ring};
   font-size: 0.74rem;
-  font-weight: 600;
+  font-weight: 500;
   color: var(--global-text);
+  font-variant-numeric: tabular-nums;
 
   span {
-    min-width: 1.8rem;
+    min-width: 1.9rem;
     text-align: center;
   }
   @media (min-width: 700px) {
+    height: 2.2rem;
     font-size: 0.86rem;
     span {
-      min-width: 2.4rem;
+      min-width: 2.5rem;
     }
   }
 `;
@@ -120,35 +149,58 @@ const Pager = styled.div`
 const PagerButton = styled.button`
   display: grid;
   place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
+  width: 1.55rem;
+  height: 1.55rem;
   padding: 0;
   border: none;
   border-radius: 50%;
   background: transparent;
-  color: var(--global-text-muted);
-  font-size: 0.6rem;
+  color: var(--global-text);
+  font-size: 1rem;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 0.2s ease,
+    transform 0.15s ease,
+    opacity 0.2s ease;
 
   &:hover:not(:disabled) {
-    color: var(--global-text);
-    background: var(--global-secondary-bg);
+    background: color-mix(in srgb, var(--global-text) 12%, transparent);
+  }
+  &:active:not(:disabled) {
+    transform: scale(0.88);
   }
   &:disabled {
-    opacity: 0.35;
+    opacity: 0.3;
     cursor: default;
   }
   @media (min-width: 700px) {
-    width: 2rem;
-    height: 2rem;
-    font-size: 0.75rem;
+    width: 1.9rem;
+    height: 1.9rem;
+    font-size: 1.1rem;
   }
+`;
+
+const rise = keyframes`
+  from { opacity: 0; transform: translateY(0.7rem) scale(0.97); }
+  to { opacity: 1; transform: none; }
 `;
 
 const Grid = styled.div`
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 1.1rem 0.6rem;
+
+  /* cards rise in whenever the page or Sub/Dub changes */
+  > * {
+    animation: ${rise} 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+    animation-delay: calc(var(--i, 0) * 24ms);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    > * {
+      animation: none;
+    }
+  }
 
   @media (min-width: 700px) {
     grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -314,10 +366,12 @@ const MetaChip = styled.span<{ $tint?: string }>`
   padding: 0.22rem 0.32rem;
   border-radius: 0.4rem;
   background: ${({ $tint }) =>
-    $tint ? `color-mix(in srgb, ${$tint} 22%, var(--global-secondary-bg))` : 'var(--global-secondary-bg)'};
-  color: var(--global-text-muted);
+    $tint
+      ? `color-mix(in srgb, ${$tint} 30%, var(--global-secondary-bg))`
+      : 'color-mix(in srgb, var(--global-text) 12%, var(--global-secondary-bg))'};
+  color: color-mix(in srgb, var(--global-text) 94%, transparent);
   font-size: 0.62rem;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
 
@@ -372,7 +426,7 @@ const typeLabel = (t?: string) => {
   }
 };
 
-const EpisodeTile = ({ a, audio }: { a: RecentAnime; audio: Audio }) => {
+const EpisodeTile = ({ a, audio, index }: { a: RecentAnime; audio: Audio; index: number }) => {
   const name = a.title.english || a.title.romaji || 'Untitled';
   const counts = useAudioCounts(a.id);
   const ref = useRef<HTMLAnchorElement>(null);
@@ -380,8 +434,10 @@ const EpisodeTile = ({ a, audio }: { a: RecentAnime; audio: Audio }) => {
   const timer = useRef<number>();
   const longPressed = useRef(false);
 
-  const startPress = () => {
+  const origin = useRef({ x: 0, y: 0 });
+  const startPress = (e: React.TouchEvent) => {
     longPressed.current = false;
+    origin.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => {
       longPressed.current = true;
@@ -391,9 +447,16 @@ const EpisodeTile = ({ a, audio }: { a: RecentAnime; audio: Audio }) => {
       } catch {
         /* ignore */
       }
-    }, 420);
+    }, 350);
   };
   const endPress = () => window.clearTimeout(timer.current);
+  // fingers jitter: only a real drag (scroll) cancels the long-press
+  const movePress = (e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (Math.hypot(t.clientX - origin.current.x, t.clientY - origin.current.y) > 12) {
+      window.clearTimeout(timer.current);
+    }
+  };
 
   // hide again after a few seconds, or when touching anywhere else
   useEffect(() => {
@@ -422,9 +485,10 @@ const EpisodeTile = ({ a, audio }: { a: RecentAnime; audio: Audio }) => {
       to={`/watch/${a.id}?ep=${a.episode}&audio=${audio}`}
       $color={a.color || undefined}
       title={`${name} - Episode ${a.episode}`}
+      style={{ ['--i' as any]: Math.min(index, 14) }}
       onTouchStart={startPress}
       onTouchEnd={endPress}
-      onTouchMove={endPress}
+      onTouchMove={movePress}
       onTouchCancel={endPress}
       onContextMenu={(e) => {
         if (longPressed.current) e.preventDefault();
@@ -505,7 +569,7 @@ export const LatestEpisodes = ({
       <Header>
         <h2>Latest Episodes</h2>
         <Controls>
-          <Segment role='group' aria-label='Audio'>
+          <Segment $dub={audio === 'dub'} role='group' aria-label='Audio'>
             <SegButton $active={audio === 'sub'} onClick={() => chooseAudio('sub')}>
               Sub
             </SegButton>
@@ -519,7 +583,7 @@ export const LatestEpisodes = ({
               disabled={current <= 1}
               onClick={() => setPage(current - 1)}
             >
-              <FaChevronLeft />
+              <FiChevronLeft />
             </PagerButton>
             <span>
               {current}/{pages}
@@ -529,7 +593,7 @@ export const LatestEpisodes = ({
               disabled={current >= pages}
               onClick={() => setPage(current + 1)}
             >
-              <FaChevronRight />
+              <FiChevronRight />
             </PagerButton>
           </Pager>
         </Controls>
@@ -544,9 +608,9 @@ export const LatestEpisodes = ({
       ) : visible.length === 0 ? (
         <Empty>No recent episodes right now.</Empty>
       ) : (
-        <Grid>
-          {visible.map((a) => (
-            <EpisodeTile key={a.id} a={a} audio={audio} />
+        <Grid key={`${audio}-${current}`}>
+          {visible.map((a, i) => (
+            <EpisodeTile key={a.id} a={a} audio={audio} index={i} />
           ))}
         </Grid>
       )}

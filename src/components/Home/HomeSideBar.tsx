@@ -152,10 +152,10 @@ const Chip = styled.span`
   gap: 0.22rem;
   padding: 0.24rem 0.38rem;
   border-radius: 0.4rem;
-  background: color-mix(in srgb, var(--global-tertiary-bg) 85%, transparent);
-  color: var(--global-text-muted);
+  background: color-mix(in srgb, var(--global-text) 12%, var(--global-secondary-bg));
+  color: color-mix(in srgb, var(--global-text) 92%, transparent);
   font-size: 0.68rem;
-  font-weight: 600;
+  font-weight: 700;
   line-height: 1;
   white-space: nowrap;
 

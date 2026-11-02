@@ -103,7 +103,7 @@ const Page = styled.div`
   isolation: isolate;
   max-width: 90rem;
   margin: 0 auto;
-  padding: 0 0.5rem 2.5rem;
+  padding: 0 0 2rem;
 
   @media (min-width: 700px) {
     padding: 0 0 3rem;
@@ -145,14 +145,14 @@ const BgLayer = styled.div`
 const Hero = styled.section`
   position: relative;
   margin-top: -3.25rem;
-  padding: 5.25rem 0.5rem 1.5rem;
+  padding: 4.4rem 0.5rem 1.2rem;
   display: grid;
-  grid-template-columns: 6.6rem minmax(0, 1fr);
+  grid-template-columns: 6.5rem minmax(0, 1fr);
   grid-template-areas:
     'poster head'
     'actions actions'
     'desc desc';
-  gap: 1rem 1rem;
+  gap: 0.85rem 0.9rem;
   align-items: end;
 
   @media (min-width: 700px) {
@@ -203,13 +203,13 @@ const Head = styled.div`
 
 const Title = styled.h1`
   margin: 0;
-  font-size: clamp(1.45rem, 6vw, 2.6rem);
+  font-size: clamp(1.15rem, 4.8vw, 2.3rem);
   font-weight: 700;
   line-height: 1.22;
   letter-spacing: -0.01em;
   text-shadow: 0 0.1rem 1rem rgba(0, 0, 0, 0.5);
   display: -webkit-box;
-  -webkit-line-clamp: 4;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 `;
@@ -219,7 +219,7 @@ const Meta = styled.div`
   flex-wrap: wrap;
   gap: 0.4rem 1rem;
   color: rgba(255, 255, 255, 0.8);
-  font-size: 0.85rem;
+  font-size: 0.76rem;
 
   span {
     display: inline-flex;
@@ -228,7 +228,7 @@ const Meta = styled.div`
     white-space: nowrap;
   }
   svg {
-    font-size: 1.05rem;
+    font-size: 0.95rem;
     opacity: 0.85;
   }
   @media (min-width: 700px) {
@@ -254,10 +254,10 @@ const ActionBtn = styled.button<{ $primary?: boolean; $on?: boolean }>`
   align-items: center;
   justify-content: center;
   gap: 0.55rem;
-  height: 2.5rem;
-  padding: 0 1rem;
+  height: 2.3rem;
+  padding: 0 0.8rem;
   border-radius: 0.5rem;
-  font-size: 0.92rem;
+  font-size: 0.84rem;
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
@@ -298,13 +298,13 @@ const Description = styled.p<{ $open: boolean }>`
   margin: 0;
   max-width: 62rem;
   color: rgba(255, 255, 255, 0.66);
-  font-size: 0.92rem;
-  line-height: 1.75;
+  font-size: 0.82rem;
+  line-height: 1.7;
   white-space: pre-line;
   ${({ $open }) =>
     $open
       ? ''
-      : `display:-webkit-box;-webkit-line-clamp:5;-webkit-box-orient:vertical;overflow:hidden;`}
+      : `display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden;`}
 
   @media (min-width: 700px) {
     font-size: 1rem;
@@ -312,7 +312,7 @@ const Description = styled.p<{ $open: boolean }>`
 `;
 
 const Section = styled.section`
-  margin-top: 2.4rem;
+  margin-top: 1.9rem;
   padding: 0 0.5rem;
   min-width: 0;
 
@@ -331,18 +331,18 @@ const SectionHead = styled.div`
 
   h2 {
     margin: 0;
-    font-size: 1.3rem;
+    font-size: 1.1rem;
     font-weight: 600;
     letter-spacing: -0.005em;
   }
   p {
     margin: 0.3rem 0 0;
     color: var(--global-text-muted);
-    font-size: 0.88rem;
+    font-size: 0.8rem;
   }
   .count {
     color: var(--global-text-muted);
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     margin-left: auto;
     white-space: nowrap;
   }
@@ -362,15 +362,15 @@ const SelectWrap = styled.label`
   select {
     appearance: none;
     -webkit-appearance: none;
-    height: 2.4rem;
-    min-width: 8rem;
-    padding: 0 2.2rem 0 1rem;
+    height: 2.1rem;
+    min-width: 7rem;
+    padding: 0 2rem 0 0.8rem;
     border-radius: 0.6rem;
     border: 1.5px solid color-mix(in srgb, var(--global-text) 28%, transparent);
     background: transparent;
     color: var(--global-text);
     font: inherit;
-    font-size: 0.92rem;
+    font-size: 0.82rem;
     cursor: pointer;
   }
   select option {
@@ -402,8 +402,8 @@ const AboutRow = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  min-height: 2.65rem;
-  font-size: 0.95rem;
+  min-height: 2rem;
+  font-size: 0.84rem;
 
   dt {
     color: var(--global-text-muted);
@@ -416,11 +416,11 @@ const AboutRow = styled.div`
 `;
 
 const Group = styled.div`
-  margin-top: 0.9rem;
+  margin-top: 0.7rem;
 
   h3 {
-    margin: 0 0 0.6rem;
-    font-size: 0.95rem;
+    margin: 0 0 0.45rem;
+    font-size: 0.84rem;
     font-weight: 400;
     color: var(--global-text-muted);
   }
@@ -429,15 +429,15 @@ const Group = styled.div`
 const ChipRow = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: 0.4rem;
 `;
 
 const Pill = styled.span<{ $outline?: boolean }>`
   display: inline-flex;
   align-items: center;
-  padding: 0.45rem 1rem;
+  padding: 0.3rem 0.8rem;
   border-radius: 999px;
-  font-size: 0.88rem;
+  font-size: 0.76rem;
   font-weight: 500;
   background: ${({ $outline }) =>
     $outline ? 'transparent' : 'color-mix(in srgb, var(--global-text) 10%, var(--global-secondary-bg))'};
@@ -450,16 +450,16 @@ const Pill = styled.span<{ $outline?: boolean }>`
 const Links = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.6rem;
-  margin-top: 1.4rem;
+  gap: 0.5rem;
+  margin-top: 1.1rem;
 `;
 
 const LinkTile = styled.a<{ $bg: string; $fg: string }>`
   display: grid;
   place-items: center;
-  width: 2.2rem;
-  height: 2.2rem;
-  border-radius: 0.6rem;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 0.55rem;
   background: ${({ $bg }) => $bg};
   color: ${({ $fg }) => $fg};
   font-size: 0.62rem;
@@ -504,8 +504,8 @@ const TrailerBox = styled.button<{ $img: string }>`
     z-index: 1;
     inset: 0;
     margin: auto;
-    width: 3.6rem;
-    height: 3.6rem;
+    width: 3.1rem;
+    height: 3.1rem;
     display: grid;
     place-items: center;
     border-radius: 50%;
@@ -541,7 +541,7 @@ const Scroller = styled.div`
 `;
 
 const EpCard = styled(Link)`
-  flex: 0 0 min(72vw, 17rem);
+  flex: 0 0 min(70vw, 16rem);
   scroll-snap-align: start;
   min-width: 0;
   text-decoration: none;
@@ -567,10 +567,10 @@ const EpCard = styled(Link)`
   }
   .badge {
     position: absolute;
-    padding: 0.28rem 0.55rem;
-    border-radius: 0.5rem;
+    padding: 0.22rem 0.5rem;
+    border-radius: 0.45rem;
     background: rgba(30, 30, 36, 0.82);
-    font-size: 0.74rem;
+    font-size: 0.66rem;
     font-weight: 600;
     color: #fff;
   }
@@ -584,8 +584,8 @@ const EpCard = styled(Link)`
   }
   strong {
     display: block;
-    margin-top: 0.65rem;
-    font-size: 0.95rem;
+    margin-top: 0.5rem;
+    font-size: 0.84rem;
     font-weight: 500;
     white-space: nowrap;
     overflow: hidden;
@@ -593,21 +593,21 @@ const EpCard = styled(Link)`
   }
   small {
     display: block;
-    margin-top: 0.3rem;
+    margin-top: 0.2rem;
     color: var(--global-text-muted);
-    font-size: 0.82rem;
+    font-size: 0.74rem;
   }
 `;
 
 const PosterCard = styled(Link)`
-  flex: 0 0 9.4rem;
+  flex: 0 0 8.2rem;
   scroll-snap-align: start;
   min-width: 0;
   text-decoration: none;
   color: var(--global-text);
 
   @media (min-width: 700px) {
-    flex-basis: 11rem;
+    flex-basis: 10.5rem;
   }
   .art {
     position: relative;
@@ -638,10 +638,10 @@ const PosterCard = styled(Link)`
     z-index: 1;
     top: 0.5rem;
     left: 0.5rem;
-    padding: 0.3rem 0.6rem;
+    padding: 0.22rem 0.5rem;
     border-radius: 999px;
     background: rgba(10, 10, 14, 0.85);
-    font-size: 0.72rem;
+    font-size: 0.64rem;
     font-weight: 700;
     color: #fff;
   }
@@ -652,14 +652,14 @@ const PosterCard = styled(Link)`
     margin: 0.55rem 0 0.35rem;
   }
   .rel {
-    margin: 0 0 0.25rem;
+    margin: 0 0 0.2rem;
     color: #b7a9ff;
     font-weight: 600;
-    font-size: 0.95rem;
+    font-size: 0.84rem;
   }
   .name {
     margin: 0;
-    font-size: 0.9rem;
+    font-size: 0.8rem;
     font-weight: 500;
     line-height: 1.4;
     display: -webkit-box;
@@ -676,11 +676,11 @@ const MiniChip = styled.span`
   display: inline-flex;
   align-items: center;
   gap: 0.25rem;
-  padding: 0.28rem 0.45rem;
-  border-radius: 0.4rem;
+  padding: 0.24rem 0.4rem;
+  border-radius: 0.38rem;
   background: color-mix(in srgb, var(--global-text) 12%, var(--global-secondary-bg));
   color: color-mix(in srgb, var(--global-text) 94%, transparent);
-  font-size: 0.7rem;
+  font-size: 0.64rem;
   font-weight: 700;
   line-height: 1;
   white-space: nowrap;
@@ -704,15 +704,15 @@ const CharRow = styled.div`
   display: flex;
   align-items: stretch;
   justify-content: space-between;
-  min-height: 4.5rem;
-  border-radius: 0.9rem;
+  min-height: 3.6rem;
+  border-radius: 0.8rem;
   overflow: hidden;
   border: 1.5px solid color-mix(in srgb, var(--global-text) 20%, transparent);
   background: color-mix(in srgb, var(--global-secondary-bg) 70%, transparent);
 
   img {
     flex: none;
-    width: 3rem;
+    width: 2.5rem;
     object-fit: cover;
     background: var(--global-tertiary-bg);
   }
@@ -723,7 +723,7 @@ const CharRow = styled.div`
     flex-direction: column;
     justify-content: center;
     gap: 0.25rem;
-    padding: 0.5rem 0.8rem;
+    padding: 0.4rem 0.7rem;
   }
   .who.right {
     align-items: flex-end;
@@ -731,22 +731,22 @@ const CharRow = styled.div`
     flex: 0 1 42%;
   }
   strong {
-    font-size: 0.98rem;
+    font-size: 0.86rem;
     font-weight: 600;
     line-height: 1.25;
     overflow: hidden;
     text-overflow: ellipsis;
   }
   .who.right strong {
-    font-size: 0.88rem;
+    font-size: 0.76rem;
     font-weight: 500;
   }
   small {
     color: var(--global-text-muted);
-    font-size: 0.82rem;
+    font-size: 0.74rem;
   }
   .who.right small {
-    font-size: 0.72rem;
+    font-size: 0.64rem;
   }
 `;
 
@@ -755,11 +755,11 @@ const MoreBtn = styled.button`
   align-items: center;
   gap: 0.5rem;
   margin: 1rem auto 0;
-  padding: 0.6rem 1rem;
+  padding: 0.5rem 1rem;
   border: none;
   background: none;
   color: var(--global-text-muted);
-  font-size: 0.95rem;
+  font-size: 0.84rem;
   cursor: pointer;
   &:hover {
     color: var(--global-text);
@@ -781,9 +781,9 @@ const Center = styled.div`
 const GalleryIcon = styled.span`
   display: grid;
   place-items: center;
-  width: 2.8rem;
-  height: 2.8rem;
-  border-radius: 0.8rem;
+  width: 2.4rem;
+  height: 2.4rem;
+  border-radius: 0.7rem;
   border: 1.5px solid color-mix(in srgb, var(--global-text) 22%, transparent);
   background: var(--global-secondary-bg);
   font-size: 1.2rem;
@@ -808,6 +808,7 @@ const Masonry = styled.div<{ $open: boolean }>`
       ? ''
       : `&::after{content:'';position:absolute;left:0;right:0;bottom:0;height:60%;pointer-events:none;background:linear-gradient(to bottom,transparent,var(--global-primary-bg));}`}
 
+  ${({ $open }) => ($open ? '' : 'column-count: 1 !important; max-height: 15rem;')}
   button {
     display: block;
     width: 100%;
@@ -1357,7 +1358,7 @@ const Details = () => {
         {episodes === null ? (
           <Scroller>
             {[0, 1].map((i) => (
-              <div key={i} style={{ flex: '0 0 min(72vw, 17rem)' }}>
+              <div key={i} style={{ flex: '0 0 min(70vw, 16rem)' }}>
                 <Shimmer $h='9.5rem' />
               </div>
             ))}
@@ -1494,7 +1495,7 @@ const Details = () => {
             </SelectWrap>
           </SectionHead>
           <Masonry $open={galleryOpen}>
-            {galleryImages.map((img) => (
+            {(galleryOpen ? galleryImages : galleryImages.slice(0, 1)).map((img) => (
               <button key={img.full} onClick={() => setLightbox(img)} aria-label='Open image'>
                 <img src={img.thumb} alt='' loading='lazy' decoding='async' />
               </button>

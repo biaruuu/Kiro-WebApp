@@ -53,7 +53,7 @@ function loadHistory(): HistoryItem[] {
 
 // ---------------------------------------------------------------------------
 const Section = styled.section`
-  margin-bottom: 2.5rem;
+  margin-bottom: 1.75rem;
 `;
 
 const Header = styled.div`
@@ -61,13 +61,18 @@ const Header = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
-  margin-bottom: 1.1rem;
+  margin-bottom: 0.9rem;
 
   h2 {
     margin: 0;
-    font-size: clamp(1.45rem, 4.6vw, 1.9rem);
+    font-size: 1.2rem;
     font-weight: 600;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.005em;
+  }
+  @media (min-width: 700px) {
+    h2 {
+      font-size: 1.45rem;
+    }
   }
 `;
 
@@ -79,13 +84,13 @@ export const ViewAll = styled.button`
   border: none;
   background: none;
   color: var(--global-text-muted);
-  font-size: 1rem;
+  font-size: 0.85rem;
   font-weight: 500;
   cursor: pointer;
   transition: color 0.2s ease;
 
   svg {
-    font-size: 0.8rem;
+    font-size: 0.65rem;
   }
   &:hover {
     color: var(--global-text);
@@ -96,10 +101,10 @@ const Row = styled.div<{ $wrap: boolean }>`
   display: ${({ $wrap }) => ($wrap ? 'grid' : 'flex')};
   ${({ $wrap }) =>
     $wrap
-      ? 'grid-template-columns: repeat(auto-fill, minmax(min(100%, 18rem), 1fr));'
+      ? 'grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));'
       : 'overflow-x: auto; scroll-snap-type: x mandatory;'}
-  gap: 1.1rem;
-  padding-bottom: 0.4rem;
+  gap: 0.75rem;
+  padding-bottom: 0.2rem;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
 
@@ -110,7 +115,7 @@ const Row = styled.div<{ $wrap: boolean }>`
 
 const Card = styled(Link)<{ $wrap: boolean }>`
   position: relative;
-  flex: 0 0 ${({ $wrap }) => ($wrap ? 'auto' : 'min(68vw, 21rem)')};
+  flex: 0 0 ${({ $wrap }) => ($wrap ? 'auto' : 'min(68vw, 18rem)')};
   scroll-snap-align: start;
   display: block;
   text-decoration: none;
@@ -119,7 +124,7 @@ const Card = styled(Link)<{ $wrap: boolean }>`
   .thumb {
     position: relative;
     aspect-ratio: 16 / 9;
-    border-radius: 1.1rem;
+    border-radius: 0.8rem;
     overflow: hidden;
     background: var(--global-secondary-bg);
   }
@@ -154,7 +159,7 @@ const Card = styled(Link)<{ $wrap: boolean }>`
     left: 0;
     right: 0;
     bottom: 0;
-    height: 0.32rem;
+    height: 0.22rem;
     background: rgba(255, 255, 255, 0.28);
   }
   .bar {
@@ -163,9 +168,9 @@ const Card = styled(Link)<{ $wrap: boolean }>`
     border-radius: 0 0.2rem 0.2rem 0;
   }
   .title {
-    margin: 0.85rem 0 0.2rem;
-    font-size: 1.12rem;
-    font-weight: 600;
+    margin: 0.6rem 0 0.15rem;
+    font-size: 0.92rem;
+    font-weight: 500;
     line-height: 1.3;
     white-space: nowrap;
     overflow: hidden;
@@ -173,20 +178,20 @@ const Card = styled(Link)<{ $wrap: boolean }>`
   }
   .ep {
     margin: 0;
-    font-size: 1rem;
+    font-size: 0.82rem;
     color: var(--global-text-muted);
   }
 `;
 
 const Remove = styled.button`
   position: absolute;
-  top: 0.65rem;
-  right: 0.65rem;
+  top: 0.5rem;
+  right: 0.5rem;
   z-index: 2;
   display: grid;
   place-items: center;
-  width: 2.2rem;
-  height: 2.2rem;
+  width: 1.7rem;
+  height: 1.7rem;
   padding: 0;
   border: none;
   border-radius: 50%;
@@ -194,7 +199,7 @@ const Remove = styled.button`
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   color: rgba(255, 255, 255, 0.75);
-  font-size: 0.85rem;
+  font-size: 0.7rem;
   cursor: pointer;
   transition:
     background-color 0.2s ease,

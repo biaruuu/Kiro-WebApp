@@ -5,29 +5,30 @@ import {
   FaChevronDown,
   FaChevronRight,
   FaClosedCaptioning,
+  FaMicrophone,
   FaRegCalendarAlt,
   FaRegStar,
 } from 'react-icons/fa';
 import type { Anime } from '../../hooks/interface';
+import { useAudioCounts } from '../../hooks/extras';
 
 const Panel = styled.section`
-  border: 1.5px solid var(--global-border);
-  border-radius: 1.4rem;
-  padding: 0.35rem 0.9rem 0.9rem;
-  margin-bottom: 1.5rem;
-  background: transparent;
+  border: 1px solid var(--global-border);
+  border-radius: 1rem;
+  padding: 0.1rem 0.6rem 0.6rem;
+  margin-bottom: 1.1rem;
 `;
 
 const PanelHeader = styled.button`
   display: flex;
   align-items: center;
-  gap: 0.85rem;
+  gap: 0.6rem;
   width: 100%;
-  padding: 1.1rem 0.4rem;
+  padding: 0.85rem 0.35rem;
   border: none;
   background: none;
   color: var(--global-text);
-  font-size: 1.45rem;
+  font-size: 0.95rem;
   font-weight: 600;
   letter-spacing: 0.01em;
   text-transform: uppercase;
@@ -35,37 +36,32 @@ const PanelHeader = styled.button`
   cursor: pointer;
 
   svg {
-    font-size: 1rem;
+    font-size: 0.7rem;
     transition: transform 0.25s ease;
   }
   &[aria-expanded='true'] svg {
     transform: rotate(90deg);
-  }
-
-  @media (max-width: 500px) {
-    font-size: 1.3rem;
   }
 `;
 
 const List = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 0.6rem;
+  gap: 0.45rem;
 `;
 
 const Item = styled(Link)<{ $bg?: string }>`
   position: relative;
   display: flex;
   align-items: stretch;
-  gap: 1rem;
-  min-height: 6rem;
-  border-radius: 1rem;
+  gap: 0.7rem;
+  min-height: 5.2rem;
+  border-radius: 0.8rem;
   overflow: hidden;
   text-decoration: none;
   color: var(--global-text);
   background: var(--global-secondary-bg);
   isolation: isolate;
-  transition: transform 0.15s ease;
 
   /* faded banner artwork on the right-hand side of the row */
   &::before {
@@ -74,7 +70,8 @@ const Item = styled(Link)<{ $bg?: string }>`
     inset: 0;
     z-index: -2;
     background: ${({ $bg }) => ($bg ? `url(${$bg})` : 'none')} right center / cover no-repeat;
-    opacity: 0.55;
+    opacity: 0.5;
+    filter: grayscale(0.35);
   }
   &::after {
     content: '';
@@ -83,18 +80,15 @@ const Item = styled(Link)<{ $bg?: string }>`
     z-index: -1;
     background: linear-gradient(
       to right,
-      var(--global-secondary-bg) 38%,
-      color-mix(in srgb, var(--global-secondary-bg) 55%, transparent) 70%,
+      var(--global-secondary-bg) 35%,
+      color-mix(in srgb, var(--global-secondary-bg) 60%, transparent) 70%,
       transparent
     );
-  }
-  &:hover {
-    transform: translateX(2px);
   }
 
   .thumb {
     flex: none;
-    width: 4.9rem;
+    width: 3.6rem;
     background: var(--global-tertiary-bg);
   }
   .thumb img {
@@ -109,16 +103,16 @@ const Item = styled(Link)<{ $bg?: string }>`
     display: flex;
     flex-direction: column;
     justify-content: center;
-    gap: 0.6rem;
-    padding: 0.7rem 0.9rem 0.7rem 0;
+    gap: 0.4rem;
+    padding: 0.5rem 0.6rem 0.5rem 0;
   }
   .title {
     display: flex;
     align-items: flex-start;
-    gap: 0.6rem;
-    font-size: 1.12rem;
-    font-weight: 600;
-    line-height: 1.3;
+    gap: 0.45rem;
+    font-size: 0.86rem;
+    font-weight: 500;
+    line-height: 1.35;
   }
   .title span {
     display: -webkit-box;
@@ -129,14 +123,24 @@ const Item = styled(Link)<{ $bg?: string }>`
   .chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.4rem;
+    gap: 0.25rem;
+  }
+
+  @media (min-width: 700px) {
+    min-height: 5.8rem;
+    .thumb {
+      width: 4rem;
+    }
+    .title {
+      font-size: 0.95rem;
+    }
   }
 `;
 
 const Dot = styled.i<{ $color: string }>`
   flex: none;
-  width: 0.7rem;
-  height: 0.7rem;
+  width: 0.5rem;
+  height: 0.5rem;
   margin-top: 0.4rem;
   border-radius: 50%;
   background: ${({ $color }) => $color};
@@ -145,18 +149,18 @@ const Dot = styled.i<{ $color: string }>`
 const Chip = styled.span`
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
-  padding: 0.3rem 0.6rem;
-  border-radius: 0.5rem;
+  gap: 0.22rem;
+  padding: 0.24rem 0.38rem;
+  border-radius: 0.4rem;
   background: color-mix(in srgb, var(--global-tertiary-bg) 85%, transparent);
   color: var(--global-text-muted);
-  font-size: 0.88rem;
+  font-size: 0.68rem;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 
   svg {
-    font-size: 0.85rem;
+    font-size: 0.72rem;
   }
 `;
 
@@ -164,12 +168,13 @@ const MoreBar = styled.button`
   display: grid;
   place-items: center;
   width: 100%;
-  height: 2.9rem;
-  margin-top: 0.7rem;
+  height: 2.2rem;
+  margin-top: 0.45rem;
   border: none;
-  border-radius: 0.9rem;
+  border-radius: 0.7rem;
   background: var(--global-secondary-bg);
   color: var(--global-text-muted);
+  font-size: 0.8rem;
   cursor: pointer;
 
   svg {
@@ -185,9 +190,58 @@ const MoreBar = styled.button`
 
 const Empty = styled.p`
   margin: 0;
-  padding: 1rem 0.4rem 0.5rem;
+  padding: 0.8rem 0.35rem 0.4rem;
+  font-size: 0.9rem;
   color: var(--global-text-muted);
 `;
+
+const Row = ({ anime }: { anime: Anime }) => {
+  const name = anime.title.english || anime.title.romaji || 'Untitled';
+  const aired = anime.status !== 'Not yet aired';
+  const counts = useAudioCounts(anime.id, aired);
+  const sub = counts?.sub || anime.currentEpisode || anime.totalEpisodes || 0;
+  const dub = counts?.dub || 0;
+  return (
+    <Item
+      to={`/anime/${anime.id}`}
+      $bg={anime.cover && anime.cover !== anime.image ? anime.cover : anime.image}
+      title={name}
+    >
+      <div className='thumb'>
+        <img src={anime.image} alt={name} loading='lazy' />
+      </div>
+      <div className='body'>
+        <div className='title'>
+          <Dot $color={dotColor(anime.status)} />
+          <span>{name}</span>
+        </div>
+        <div className='chips'>
+          {anime.type && <Chip>{anime.type.replace('_', ' ')}</Chip>}
+          {anime.releaseDate ? (
+            <Chip>
+              <FaRegCalendarAlt /> {anime.releaseDate}
+            </Chip>
+          ) : null}
+          {sub ? (
+            <Chip>
+              <FaClosedCaptioning /> {sub}
+            </Chip>
+          ) : null}
+          {dub ? (
+            <Chip>
+              <FaMicrophone /> {dub}
+            </Chip>
+          ) : null}
+          {anime.rating ? (
+            <Chip>
+              <FaRegStar /> {anime.rating}
+            </Chip>
+          ) : null}
+        </div>
+      </div>
+    </Item>
+  );
+};
 
 const dotColor = (status?: string) => {
   switch (status) {
@@ -236,46 +290,9 @@ export const HomeSideBar = ({
             <Empty>Nothing to show right now.</Empty>
           ) : (
             <List>
-              {shown.map((anime) => {
-                const name = anime.title.english || anime.title.romaji || 'Untitled';
-                const episodes = anime.currentEpisode || anime.totalEpisodes;
-                return (
-                  <Item
-                    key={anime.id}
-                    to={`/anime/${anime.id}`}
-                    $bg={anime.cover && anime.cover !== anime.image ? anime.cover : anime.image}
-                    title={name}
-                  >
-                    <div className='thumb'>
-                      <img src={anime.image} alt={name} loading='lazy' />
-                    </div>
-                    <div className='body'>
-                      <div className='title'>
-                        <Dot $color={dotColor(anime.status)} />
-                        <span>{name}</span>
-                      </div>
-                      <div className='chips'>
-                        {anime.type && <Chip>{anime.type.replace('_', ' ')}</Chip>}
-                        {anime.releaseDate ? (
-                          <Chip>
-                            <FaRegCalendarAlt /> {anime.releaseDate}
-                          </Chip>
-                        ) : null}
-                        {episodes ? (
-                          <Chip>
-                            <FaClosedCaptioning /> {episodes}
-                          </Chip>
-                        ) : null}
-                        {anime.rating ? (
-                          <Chip>
-                            <FaRegStar /> {anime.rating}
-                          </Chip>
-                        ) : null}
-                      </div>
-                    </div>
-                  </Item>
-                );
-              })}
+              {shown.map((anime) => (
+                <Row key={anime.id} anime={anime} />
+              ))}
             </List>
           )}
 

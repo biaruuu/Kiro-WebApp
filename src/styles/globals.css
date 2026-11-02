@@ -93,7 +93,7 @@ body {
   font-feature-settings: normal;
   font-variation-settings: normal;
   margin: 0;
-  padding: 4.5rem 1rem 1.5rem 1rem;
+  padding: 4rem 1rem 1.5rem 1rem;
   max-width: 105rem;
   margin: auto;
   background-color: var(--global-primary-bg);
@@ -140,7 +140,7 @@ a {
 /* Responsive styles */
 @media (max-width: 500px) {
   body {
-    padding: 4rem 0.75rem 0.5rem 0.75rem;
+    padding: 3.5rem 0.5rem 0.5rem 0.5rem;
   }
 }
 /* Selection styles */

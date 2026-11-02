@@ -2,19 +2,22 @@ import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
 import { FaPlay, FaInfoCircle } from 'react-icons/fa';
+import { useTitleLogo } from '../../hooks/extras';
+import { ListButton } from './ListButton';
 import type { Anime } from '../../hooks/interface';
 
 const AUTO_MS = 8000;
+const titleOf = (a: Anime) => a.title?.english || a.title?.romaji || 'Untitled';
 
 // The hero is full-bleed: it cancels the body's padding (and max-width) so the
 // artwork reaches the screen edges and sits underneath the transparent navbar.
 const Hero = styled.section`
   position: relative;
   width: 100vw;
-  margin: -4.5rem 0 0 calc(50% - 50vw);
-  height: min(86vh, 46rem);
-  height: min(86svh, 46rem);
-  min-height: 30rem;
+  margin: -4rem 0 0 calc(50% - 50vw);
+  height: min(80vh, 44rem);
+  height: min(80svh, 44rem);
+  min-height: 28rem;
   overflow: hidden;
   background: #0b0b10;
   color: #fff;
@@ -22,12 +25,12 @@ const Hero = styled.section`
   user-select: none;
 
   @media (max-width: 500px) {
-    margin-top: -4rem;
-    height: min(78svh, 42rem);
-    min-height: 27rem;
+    margin-top: -3.5rem;
+    height: min(76svh, 40rem);
+    min-height: 26rem;
   }
   @media (min-width: 1000px) {
-    height: min(80vh, 44rem);
+    height: min(78vh, 42rem);
   }
 `;
 
@@ -92,13 +95,14 @@ const Content = styled.div`
   bottom: 0;
   max-width: 105rem;
   margin: 0 auto;
-  padding: 0 1rem 2.25rem;
+  padding: 0 1.25rem 1.75rem;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  align-items: flex-start;
+  gap: 0.7rem;
 
   @media (min-width: 700px) {
-    padding: 0 2rem 3.25rem;
+    padding: 0 2rem 3rem;
     max-width: 105rem;
   }
   @media (min-width: 1000px) {
@@ -106,13 +110,31 @@ const Content = styled.div`
   }
 `;
 
-const Title = styled.h2`
+const Logo = styled.img`
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: min(82%, 24rem);
+  max-height: 8.5rem;
+  object-fit: contain;
+  object-position: left bottom;
+  filter: drop-shadow(0 0.2rem 1rem rgba(0, 0, 0, 0.6));
+  animation: ${fadeIn} 0.6s ease both;
+
+  @media (min-width: 700px) {
+    max-width: 30rem;
+    max-height: 11rem;
+  }
+`;
+
+const Title = styled.h2<{ $hidden?: boolean }>`
   margin: 0;
-  max-width: 42rem;
-  font-size: clamp(2.1rem, 8.2vw, 4rem);
+  max-width: 36rem;
+  font-size: clamp(1.7rem, 6.4vw, 3rem);
   font-weight: 800;
-  line-height: 1.04;
-  letter-spacing: -0.025em;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  visibility: ${({ $hidden }) => ($hidden ? 'hidden' : 'visible')};
   text-shadow: 0 0.2rem 1.5rem rgba(0, 0, 0, 0.55);
   display: -webkit-box;
   -webkit-line-clamp: 3;
@@ -130,54 +152,50 @@ const Chips = styled.div`
 const Chip = styled.span`
   display: inline-flex;
   align-items: center;
-  padding: 0.55rem 1.1rem;
+  padding: 0.38rem 0.85rem;
   border-radius: 999px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
-  font-size: 0.95rem;
+  font-size: 0.8rem;
   font-weight: 500;
   color: rgba(255, 255, 255, 0.92);
   white-space: nowrap;
 
-  @media (max-width: 500px) {
-    padding: 0.5rem 1rem;
-    font-size: 0.9rem;
-  }
 `;
 
 const Description = styled.p`
   margin: 0;
   max-width: 40rem;
-  font-size: 1.05rem;
-  line-height: 1.55;
+  font-size: 0.9rem;
+  line-height: 1.6;
   color: rgba(255, 255, 255, 0.78);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 
-  @media (max-width: 500px) {
-    font-size: 1.02rem;
+  @media (min-width: 700px) {
+    font-size: 1rem;
   }
 `;
 
 const Actions = styled.div`
   display: flex;
-  gap: 0.75rem;
-  margin-top: 0.25rem;
+  gap: 0.5rem;
+  margin-top: 0.2rem;
 `;
 
 const HeroButton = styled(Link)<{ $primary?: boolean }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.6rem;
-  height: 3.1rem;
-  padding: 0 1.9rem;
-  border-radius: 0.6rem;
-  font-size: 1.02rem;
+  gap: 0.5rem;
+  height: 2.5rem;
+  padding: 0 1.4rem;
+  border-radius: 0.5rem;
+  font-size: 0.9rem;
   font-weight: 600;
   text-decoration: none;
   color: ${({ $primary }) => ($primary ? '#0b0b10' : '#fff')};
@@ -190,7 +208,7 @@ const HeroButton = styled(Link)<{ $primary?: boolean }>`
     background-color 0.2s ease;
 
   svg {
-    font-size: 1.15rem;
+    font-size: 0.95rem;
   }
   &:hover {
     background: ${({ $primary }) => ($primary ? '#fff' : 'rgba(86, 86, 96, 0.85)')};
@@ -201,15 +219,14 @@ const HeroButton = styled(Link)<{ $primary?: boolean }>`
   }
 
   @media (max-width: 380px) {
-    padding: 0 1.3rem;
-    font-size: 0.95rem;
+    padding: 0 1.05rem;
   }
 `;
 
 const Dots = styled.div`
   position: absolute;
-  top: 5.5rem;
-  right: 1rem;
+  top: 4.4rem;
+  right: 1.25rem;
   z-index: 3;
   display: flex;
   gap: 0.35rem;
@@ -248,13 +265,23 @@ const SkeletonHero = styled(Hero)`
   }
 `;
 
+const HeroTitle = ({ anime, active }: { anime: Anime; active: boolean }) => {
+  const logo = useTitleLogo(anime.id);
+  const [broken, setBroken] = useState(false);
+  const name = titleOf(anime);
+  if (logo && !broken) {
+    return <Logo src={logo} alt={name} onError={() => setBroken(true)} />;
+  }
+  // while the lookup is pending keep the layout but don't flash the text title
+  return <Title $hidden={active && logo === undefined}>{name}</Title>;
+};
+
 interface HomeCarouselProps {
   data: Anime[];
   loading: boolean;
   error?: string | null;
 }
 
-const titleOf = (a: Anime) => a.title?.english || a.title?.romaji || 'Untitled';
 
 export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
   const [index, setIndex] = useState(0);
@@ -321,7 +348,7 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
             )}
             <Shade />
             <Content>
-              <Title>{titleOf(anime)}</Title>
+              <HeroTitle anime={anime} active={active} />
               <Chips>
                 {chips.map((c) => (
                   <Chip key={c}>{c}</Chip>
@@ -335,6 +362,7 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
                 <HeroButton to={`/anime/${anime.id}`} tabIndex={active ? 0 : -1}>
                   <FaInfoCircle /> Details
                 </HeroButton>
+                <ListButton anime={anime} variant='hero' />
               </Actions>
             </Content>
           </Slide>

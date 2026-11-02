@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
-import { FaChevronLeft, FaChevronRight, FaClosedCaptioning, FaPlay } from 'react-icons/fa';
+import { FaChevronLeft, FaChevronRight, FaClosedCaptioning, FaMicrophone, FaPlay } from 'react-icons/fa';
+import { useAudioCounts } from '../../hooks/extras';
+import { ListButton } from './ListButton';
 import type { Anime } from '../../hooks/interface';
 
 export type RecentAnime = Anime & { episode: number; airingAt: number };
@@ -30,50 +32,54 @@ const perPageFor = (width: number) => (width >= 700 ? 20 : 15);
 
 // ---------------------------------------------------------------------------
 const Section = styled.section`
-  margin-bottom: 2.5rem;
+  margin-bottom: 1.75rem;
 `;
 
 const Header = styled.div`
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 1.25rem;
+  gap: 0.6rem;
+  margin-bottom: 0.9rem;
 
   h2 {
     margin: 0;
     flex: 1 1 auto;
     min-width: 0;
-    font-size: clamp(1.45rem, 4.6vw, 1.9rem);
+    font-size: 1.2rem;
     font-weight: 600;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.005em;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+  }
+  @media (min-width: 700px) {
+    h2 {
+      font-size: 1.45rem;
+    }
   }
 `;
 
 const Controls = styled.div`
   display: flex;
   align-items: center;
-  gap: 0.6rem;
+  gap: 0.45rem;
   flex: none;
 `;
 
 const Segment = styled.div`
   display: inline-flex;
-  padding: 0.3rem;
+  padding: 0.2rem;
   border-radius: 999px;
-  border: 1.5px solid var(--global-border);
-  background: transparent;
+  border: 1px solid var(--global-border);
 `;
 
 const SegButton = styled.button<{ $active: boolean }>`
-  min-width: 4.4rem;
-  padding: 0.7rem 1.2rem;
+  min-width: 3rem;
+  padding: 0.4rem 0.8rem;
   border: none;
   border-radius: 999px;
-  font-size: 1rem;
+  font-size: 0.82rem;
   font-weight: 600;
   cursor: pointer;
   color: ${({ $active }) => ($active ? '#0b0b10' : 'var(--global-text)')};
@@ -82,39 +88,46 @@ const SegButton = styled.button<{ $active: boolean }>`
     background-color 0.2s ease,
     color 0.2s ease;
 
-  @media (max-width: 420px) {
+  @media (min-width: 700px) {
     min-width: 3.6rem;
-    padding: 0.6rem 0.9rem;
+    padding: 0.5rem 1rem;
+    font-size: 0.92rem;
   }
 `;
 
 const Pager = styled.div`
   display: inline-flex;
   align-items: center;
-  padding: 0.3rem;
+  padding: 0.2rem;
   border-radius: 999px;
-  border: 1.5px solid var(--global-border);
-  font-size: 1rem;
+  border: 1px solid var(--global-border);
+  font-size: 0.82rem;
   font-weight: 600;
   color: var(--global-text);
 
   span {
-    min-width: 3rem;
+    min-width: 2rem;
     text-align: center;
+  }
+  @media (min-width: 700px) {
+    font-size: 0.92rem;
+    span {
+      min-width: 2.6rem;
+    }
   }
 `;
 
 const PagerButton = styled.button`
   display: grid;
   place-items: center;
-  width: 2.6rem;
-  height: 2.6rem;
+  width: 1.7rem;
+  height: 1.7rem;
   padding: 0;
   border: none;
   border-radius: 50%;
   background: transparent;
   color: var(--global-text-muted);
-  font-size: 0.8rem;
+  font-size: 0.65rem;
   cursor: pointer;
 
   &:hover:not(:disabled) {
@@ -125,16 +138,21 @@ const PagerButton = styled.button`
     opacity: 0.35;
     cursor: default;
   }
+  @media (min-width: 700px) {
+    width: 2rem;
+    height: 2rem;
+    font-size: 0.75rem;
+  }
 `;
 
 const Grid = styled.div`
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 1.4rem 0.9rem;
+  gap: 1.1rem 0.6rem;
 
   @media (min-width: 700px) {
     grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 1.8rem 1.2rem;
+    gap: 1.5rem 0.9rem;
   }
   @media (min-width: 1500px) {
     grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -153,7 +171,7 @@ const Card = styled(Link)<{ $color?: string }>`
   .poster {
     position: relative;
     aspect-ratio: 2 / 3;
-    border-radius: 1rem;
+    border-radius: 0.8rem;
     overflow: hidden;
     background: var(--global-secondary-bg);
   }
@@ -169,13 +187,13 @@ const Card = styled(Link)<{ $color?: string }>`
   .poster::after {
     content: '';
     position: absolute;
-    inset: 45% 0 0;
-    background: linear-gradient(to top, rgba(8, 8, 12, 0.92), transparent);
+    inset: 55% 0 0;
+    background: linear-gradient(to top, rgba(8, 8, 12, 0.88), transparent);
     pointer-events: none;
   }
   &:hover .poster img {
-    transform: scale(1.06);
-    filter: brightness(0.62);
+    transform: scale(1.05);
+    filter: brightness(0.65);
   }
   .play {
     position: absolute;
@@ -184,8 +202,9 @@ const Card = styled(Link)<{ $color?: string }>`
     display: grid;
     place-items: center;
     color: #fff;
-    font-size: 2.4rem;
+    font-size: 1.8rem;
     opacity: 0;
+    pointer-events: none;
     transition: opacity 0.2s ease;
   }
   &:hover .play {
@@ -200,29 +219,29 @@ const Card = styled(Link)<{ $color?: string }>`
     display: flex;
     justify-content: space-between;
     align-items: baseline;
-    gap: 0.4rem;
-    padding: 0.75rem 0.85rem;
+    gap: 0.3rem;
+    padding: 0.5rem 0.55rem;
     color: #fff;
-    font-weight: 700;
-    font-size: 1.15rem;
+    font-weight: 600;
+    font-size: 0.82rem;
     text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
+    white-space: nowrap;
   }
   .overlay small {
-    font-size: 1.02rem;
-    font-weight: 600;
-    opacity: 0.92;
-    white-space: nowrap;
+    font-size: 0.78rem;
+    font-weight: 500;
+    opacity: 0.9;
   }
   .meta {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.45rem;
-    margin: 0.85rem 0 0.65rem;
+    gap: 0.25rem;
+    margin: 0.55rem 0 0.4rem;
   }
   .name {
     margin: 0;
-    font-size: 1.2rem;
-    font-weight: 600;
+    font-size: 0.86rem;
+    font-weight: 500;
     line-height: 1.4;
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -234,16 +253,16 @@ const Card = styled(Link)<{ $color?: string }>`
     color: ${({ $color }) => $color || 'var(--primary-accent)'};
   }
 
-  @media (max-width: 700px) {
+  @media (min-width: 700px) {
     .overlay {
-      font-size: 1.02rem;
-      padding: 0.6rem 0.7rem;
+      font-size: 0.95rem;
+      padding: 0.65rem 0.75rem;
     }
     .overlay small {
-      font-size: 0.95rem;
+      font-size: 0.88rem;
     }
     .name {
-      font-size: 1.12rem;
+      font-size: 0.98rem;
     }
   }
 `;
@@ -251,19 +270,26 @@ const Card = styled(Link)<{ $color?: string }>`
 const MetaChip = styled.span<{ $tint?: string }>`
   display: inline-flex;
   align-items: center;
-  gap: 0.4rem;
-  padding: 0.38rem 0.7rem;
-  border-radius: 0.55rem;
+  gap: 0.22rem;
+  padding: 0.24rem 0.38rem;
+  border-radius: 0.4rem;
   background: ${({ $tint }) =>
     $tint ? `color-mix(in srgb, ${$tint} 22%, var(--global-secondary-bg))` : 'var(--global-secondary-bg)'};
   color: var(--global-text-muted);
-  font-size: 0.95rem;
+  font-size: 0.68rem;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 
   svg {
-    font-size: 1rem;
+    font-size: 0.72rem;
+  }
+  @media (min-width: 700px) {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.78rem;
+    svg {
+      font-size: 0.82rem;
+    }
   }
 `;
 
@@ -273,8 +299,8 @@ const shimmer = keyframes`
 `;
 
 const SkeletonCard = styled.div`
-  aspect-ratio: 2 / 3.9;
-  border-radius: 1rem;
+  aspect-ratio: 2 / 3.6;
+  border-radius: 0.8rem;
   background: linear-gradient(
     90deg,
     var(--global-secondary-bg),
@@ -291,6 +317,45 @@ const Empty = styled.p`
   text-align: center;
   color: var(--global-text-muted);
 `;
+
+const EpisodeTile = ({ a, audio }: { a: RecentAnime; audio: Audio }) => {
+  const name = a.title.english || a.title.romaji || 'Untitled';
+  const counts = useAudioCounts(a.id);
+  const sub = counts?.sub || a.episode;
+  const dub = counts?.dub || 0;
+  return (
+    <Card
+      to={`/watch/${a.id}?ep=${a.episode}&audio=${audio}`}
+      $color={a.color || undefined}
+      title={`${name} - Episode ${a.episode}`}
+    >
+      <div className='poster'>
+        <img src={a.image} alt={name} loading='lazy' />
+        <span className='play'>
+          <FaPlay />
+        </span>
+        <ListButton anime={a} />
+        <div className='overlay'>
+          <span>EP {a.episode}</span>
+          <small>{timeAgo(a.airingAt)}</small>
+        </div>
+      </div>
+      <div className='meta'>
+        <MetaChip $tint={a.color || undefined}>
+          <FaClosedCaptioning /> {sub}
+        </MetaChip>
+        {dub > 0 && (
+          <MetaChip $tint={a.color || undefined}>
+            <FaMicrophone /> {dub}
+          </MetaChip>
+        )}
+        {a.type && <MetaChip>{a.type.replace('_', ' ')}</MetaChip>}
+        {a.releaseDate ? <MetaChip>{a.releaseDate}</MetaChip> : null}
+      </div>
+      <p className='name'>{name}</p>
+    </Card>
+  );
+};
 
 // ---------------------------------------------------------------------------
 export const LatestEpisodes = ({
@@ -371,36 +436,9 @@ export const LatestEpisodes = ({
         <Empty>No recent episodes right now.</Empty>
       ) : (
         <Grid>
-          {visible.map((a) => {
-            const name = a.title.english || a.title.romaji || 'Untitled';
-            return (
-              <Card
-                key={a.id}
-                to={`/watch/${a.id}?ep=${a.episode}&audio=${audio}`}
-                $color={a.color || undefined}
-                title={`${name} - Episode ${a.episode}`}
-              >
-                <div className='poster'>
-                  <img src={a.image} alt={name} loading='lazy' />
-                  <span className='play'>
-                    <FaPlay />
-                  </span>
-                  <div className='overlay'>
-                    <span>EP {a.episode}</span>
-                    <small>{timeAgo(a.airingAt)}</small>
-                  </div>
-                </div>
-                <div className='meta'>
-                  <MetaChip $tint={a.color || undefined}>
-                    <FaClosedCaptioning /> {a.episode}
-                  </MetaChip>
-                  {a.type && <MetaChip>{a.type.replace('_', ' ')}</MetaChip>}
-                  {a.releaseDate ? <MetaChip>{a.releaseDate}</MetaChip> : null}
-                </div>
-                <p className='name'>{name}</p>
-              </Card>
-            );
-          })}
+          {visible.map((a) => (
+            <EpisodeTile key={a.id} a={a} audio={audio} />
+          ))}
         </Grid>
       )}
     </Section>

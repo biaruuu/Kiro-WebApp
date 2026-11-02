@@ -30,7 +30,7 @@ const StyledNavbar = styled.div<{ $isExtended?: boolean; $solid: boolean }>`
   z-index: 100;
   text-align: center;
   margin: 0;
-  padding: calc(0.9rem + env(safe-area-inset-top)) 1.25rem 0.9rem;
+  padding: calc(0.6rem + env(safe-area-inset-top)) 1.25rem 0.6rem;
   background-color: ${({ $solid }) =>
     $solid ? 'var(--global-primary-bg-tr)' : 'transparent'};
   backdrop-filter: ${({ $solid }) => ($solid ? 'blur(14px)' : 'none')};
@@ -61,7 +61,7 @@ const TopContainer = styled.div`
 `;
 
 const LogoImg = styled(Link)<{ $solid: boolean }>`
-  font-size: 1.85rem;
+  font-size: 1.5rem;
   font-weight: 800;
   letter-spacing: -0.04em;
   line-height: 1;
@@ -87,7 +87,7 @@ const LogoImg = styled(Link)<{ $solid: boolean }>`
   }
 
   @media (max-width: 500px) {
-    font-size: 1.7rem;
+    font-size: 1.4rem;
   }
 `;
 
@@ -177,14 +177,14 @@ const ClearButton = styled.button<{ $query: string }>`
 const StyledButton = styled.button<{ $solid?: boolean }>`
   display: grid;
   place-items: center;
-  width: 2.75rem;
-  height: 2.75rem;
+  width: 2.4rem;
+  height: 2.4rem;
   padding: 0;
   border: none;
   border-radius: 50%;
   background: transparent;
   color: ${({ $solid }) => ($solid ? 'var(--global-text)' : '#fff')};
-  font-size: 1.7rem;
+  font-size: 1.4rem;
   cursor: pointer;
   opacity: 0.85;
   transition:

@@ -3,7 +3,8 @@ import styled, { keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
 import { FaClosedCaptioning, FaMicrophone, FaPlay } from 'react-icons/fa';
 import { FiChevronLeft, FiChevronRight } from 'react-icons/fi';
-import { useAudioCounts } from '../../hooks/extras';
+import { fetchAudioCounts, useAudioCounts } from '../../hooks/extras';
+import { fetchPopularAnime, fetchTopAiringAnime } from '../../hooks/useApi';
 import { ListButton } from './ListButton';
 import type { Anime } from '../../hooks/interface';
 
@@ -473,8 +474,6 @@ const EpisodeTile = ({ a, audio, index }: { a: RecentAnime; audio: Audio; index:
 
   useEffect(() => () => window.clearTimeout(timer.current), []);
 
-  // Dub tab: only shows that do have a dub (once we know).
-  if (audio === 'dub' && counts && counts.dub === 0) return null;
 
   const sub = counts?.sub || a.episode;
   const dub = counts?.dub || 0;
@@ -530,6 +529,67 @@ const EpisodeTile = ({ a, audio, index }: { a: RecentAnime; audio: Audio; index:
 };
 
 // ---------------------------------------------------------------------------
+// Dub tab: the Latest Episodes feed only knows about sub releases, so we check
+// each anime against the stream API and keep the ones that have a dub. Recent
+// releases come first (newest dub on top); popular / airing shows fill the rest
+// so the tab is never empty. Results appear progressively while checking.
+const useDubList = (recent: RecentAnime[], enabled: boolean) => {
+  const [extra, setExtra] = useState<RecentAnime[]>([]);
+  const [counts, setCounts] = useState<Record<string, number>>({});
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!enabled || extra.length) return;
+    let alive = true;
+    Promise.allSettled([fetchTopAiringAnime(1, 30), fetchPopularAnime(1, 30)]).then((rs) => {
+      if (!alive) return;
+      const out: RecentAnime[] = [];
+      for (const r of rs)
+        if (r.status === 'fulfilled')
+          for (const a of ((r.value as any)?.results ?? []) as Anime[])
+            out.push({ ...a, episode: a.currentEpisode || 1, airingAt: 0 });
+      setExtra(out);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [enabled, extra.length]);
+
+  const pool = useMemo(() => {
+    const seen = new Set<string>();
+    return [...recent, ...extra].filter((a) => (seen.has(a.id) ? false : (seen.add(a.id), true)));
+  }, [recent, extra]);
+
+  useEffect(() => {
+    if (!enabled) return;
+    let alive = true;
+    setBusy(true);
+    let left = pool.length;
+    if (!left) setBusy(false);
+    for (const a of pool) {
+      fetchAudioCounts(a.id).then((c) => {
+        if (!alive) return;
+        if (c) setCounts((m) => (m[a.id] === c.dub ? m : { ...m, [a.id]: c.dub }));
+        if (--left === 0) setBusy(false);
+      });
+    }
+    return () => {
+      alive = false;
+    };
+  }, [enabled, pool]);
+
+  const items = useMemo(
+    () =>
+      pool
+        .filter((a) => (counts[a.id] ?? 0) > 0)
+        // recent releases keep their order; show the newest dub episode
+        .map((a) => ({ ...a, episode: counts[a.id] })),
+    [pool, counts],
+  );
+  return { items, busy };
+};
+
+// ---------------------------------------------------------------------------
 export const LatestEpisodes = ({
   items,
   loading,
@@ -539,6 +599,8 @@ export const LatestEpisodes = ({
 }) => {
   const [audio, setAudio] = useState<Audio>(readAudio);
   const [page, setPage] = useState(1);
+  const dub = useDubList(items, audio === 'dub');
+  const list: RecentAnime[] = audio === 'dub' ? dub.items : items;
   const [perPage, setPerPage] = useState(() => perPageFor(window.innerWidth));
 
   useEffect(() => {
@@ -547,14 +609,15 @@ export const LatestEpisodes = ({
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  const pages = Math.max(1, Math.ceil(items.length / perPage));
+  const pages = Math.max(1, Math.ceil(list.length / perPage));
   const current = Math.min(page, pages);
   const visible = useMemo(
-    () => items.slice((current - 1) * perPage, current * perPage),
-    [items, current, perPage],
+    () => list.slice((current - 1) * perPage, current * perPage),
+    [list, current, perPage],
   );
 
   const chooseAudio = (a: Audio) => {
+    setPage(1);
     setAudio(a);
     try {
       localStorage.setItem('preferred-audio', a);
@@ -598,7 +661,7 @@ export const LatestEpisodes = ({
         </Controls>
       </Header>
 
-      {loading ? (
+      {loading || (audio === 'dub' && dub.items.length === 0 && dub.busy) ? (
         <Grid>
           {Array.from({ length: perPage }, (_, i) => (
             <SkeletonCard key={i} />

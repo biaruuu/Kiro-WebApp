@@ -293,8 +293,32 @@ const ActionBtn = styled.button<{ $primary?: boolean; $on?: boolean }>`
   }
 `;
 
-const Description = styled.p<{ $open: boolean }>`
+const DescBox = styled.div`
   grid-area: desc;
+  min-width: 0;
+`;
+
+const ReadMore = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+  padding: 0.2rem 0;
+  border: none;
+  background: none;
+  color: #b7a9ff;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  svg {
+    transition: transform 0.25s ease;
+  }
+  &[aria-expanded='true'] svg {
+    transform: rotate(180deg);
+  }
+`;
+
+const Description = styled.p<{ $open: boolean }>`
   margin: 0;
   max-width: 62rem;
   color: rgba(255, 255, 255, 0.66);
@@ -1227,13 +1251,15 @@ const Details = () => {
           <ListButton anime={anime} />
         </Actions>
 
-        <Description
-          $open={descOpen}
-          onClick={() => setDescOpen((v) => !v)}
-          style={{ cursor: 'pointer' }}
-        >
-          {desc}
-        </Description>
+        <DescBox>
+          <Description $open={descOpen}>{desc}</Description>
+          {desc.length > 200 && (
+            <ReadMore type='button' aria-expanded={descOpen} onClick={() => setDescOpen((v) => !v)}>
+              {descOpen ? 'Show less' : 'Read more'}
+              <FiChevronDown />
+            </ReadMore>
+          )}
+        </DescBox>
       </Hero>
 
       {/* ---------- about ---------- */}

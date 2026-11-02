@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type TouchEvent } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
 import { FaClosedCaptioning, FaMicrophone, FaPlay } from 'react-icons/fa';
@@ -435,7 +435,7 @@ const EpisodeTile = ({ a, audio, index }: { a: RecentAnime; audio: Audio; index:
   const longPressed = useRef(false);
 
   const origin = useRef({ x: 0, y: 0 });
-  const startPress = (e: React.TouchEvent) => {
+  const startPress = (e: TouchEvent) => {
     longPressed.current = false;
     origin.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
     window.clearTimeout(timer.current);
@@ -451,7 +451,7 @@ const EpisodeTile = ({ a, audio, index }: { a: RecentAnime; audio: Audio; index:
   };
   const endPress = () => window.clearTimeout(timer.current);
   // fingers jitter: only a real drag (scroll) cancels the long-press
-  const movePress = (e: React.TouchEvent) => {
+  const movePress = (e: TouchEvent) => {
     const t = e.touches[0];
     if (Math.hypot(t.clientX - origin.current.x, t.clientY - origin.current.y) > 12) {
       window.clearTimeout(timer.current);

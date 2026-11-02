@@ -18,10 +18,12 @@ import { fetchProviderEpisodes, type StreamEpisode } from '../hooks/anivexa';
 import {
   fetchExternalIds,
   fetchMalScore,
+  fetchSeasons,
   fetchTmdbGallery,
   useAudioCounts,
   type ExternalIds,
   type GalleryImage,
+  type SeasonEntry,
   type TmdbGallery,
 } from '../hooks/extras';
 import { useMyList } from '../hooks/watchlist';
@@ -696,6 +698,14 @@ const PosterCard = styled(Link)`
   }
 `;
 
+const SeasonWrap = styled.div<{ $current: boolean }>`
+  display: contents;
+  ${({ $current }) =>
+    $current
+      ? `a .art { border-color: #b7a9ff; box-shadow: 0 0 0 1px #b7a9ff; }`
+      : ''}
+`;
+
 const MiniChip = styled.span`
   display: inline-flex;
   align-items: center;
@@ -1009,6 +1019,7 @@ const Details = () => {
   const [mal, setMal] = useState<number | null>(null);
   const [ids, setIds] = useState<ExternalIds>({});
   const [gallery, setGallery] = useState<TmdbGallery | null>(null);
+  const [seasons, setSeasons] = useState<SeasonEntry[]>([]);
 
   const [descOpen, setDescOpen] = useState(false);
   const [trailer, setTrailer] = useState(false);
@@ -1032,6 +1043,7 @@ const Details = () => {
     setMal(null);
     setIds({});
     setGallery(null);
+    setSeasons([]);
     setDescOpen(false);
     setAllChars(false);
     setGalleryOpen(false);
@@ -1061,6 +1073,7 @@ const Details = () => {
       .catch(() => alive && setEpisodes([]));
 
     fetchExternalIds(animeId).then((v) => alive && setIds(v));
+    fetchSeasons(animeId).then((v) => alive && setSeasons(v));
     return () => {
       alive = false;
     };
@@ -1409,13 +1422,50 @@ const Details = () => {
                     </span>
                   )}
                 </div>
-                <strong>Episode {ep.number}</strong>
-                <small>{dateLabel(ep.airDate) || ep.title || ' '}</small>
+                <strong>
+                  {ep.title && !/^episode\s*\d+$/i.test(ep.title.trim())
+                    ? ep.title
+                    : `Episode ${ep.number}`}
+                </strong>
+                <small>
+                  Episode {ep.number}
+                  {dateLabel(ep.airDate) ? ` · ${dateLabel(ep.airDate)}` : ''}
+                </small>
               </EpCard>
             ))}
           </Scroller>
         )}
       </Section>
+
+      {/* ---------- seasons ---------- */}
+      {seasons.length > 1 && (
+        <Section>
+          <SectionHead>
+            <div>
+              <h2>Seasons</h2>
+              <p>Every season and part of this series</p>
+            </div>
+            <span className='count'>{seasons.length} entries</span>
+          </SectionHead>
+          <Scroller>
+            {seasons.map((se) => (
+              <SeasonWrap key={se.id} $current={se.id === String(anime.id)}>
+                <AnimeCard
+                  relation={se.id === String(anime.id) ? `${se.label} · Current` : se.label}
+                  item={{
+                    id: se.id,
+                    title: { english: se.title },
+                    image: se.image,
+                    type: se.format,
+                    releaseDate: se.year,
+                    status: se.status === 'NOT_YET_RELEASED' ? 'Not yet aired' : se.status,
+                  }}
+                />
+              </SeasonWrap>
+            ))}
+          </Scroller>
+        </Section>
+      )}
 
       {/* ---------- related ---------- */}
       {related.length > 0 && (

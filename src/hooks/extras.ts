@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchMap, fetchProviderEpisodes } from './anivexa';
+import { anilistRequest } from './anilist';
 
 // ---------------------------------------------------------------------------
 // Tiny concurrency-limited queue so lists of cards don't fire dozens of
@@ -281,5 +282,99 @@ export function fetchExternalIds(anilistId: string): Promise<ExternalIds> {
       .catch(() => ({}) as ExternalIds);
     idsMem.set(anilistId, p);
   }
+  return p;
+}
+
+// ---------------------------------------------------------------------------
+// Seasons / parts: walks AniList PREQUEL / SEQUEL links to rebuild the whole
+// franchise line (Season 1, Season 2, Part 2, movies ...), oldest first.
+// ---------------------------------------------------------------------------
+export interface SeasonEntry {
+  id: string;
+  title: string;
+  image: string;
+  color?: string | null;
+  format: string;
+  status: string;
+  episodes: number | null;
+  year: number | null;
+  sort: number;
+  label: string;
+}
+
+const SEASON_QUERY = `
+  query ($id: Int) {
+    Media(id: $id, type: ANIME) {
+      id format status episodes seasonYear startDate { year month day }
+      title { romaji english }
+      coverImage { large color }
+      relations { edges { relationType node { id type format } } }
+    }
+  }
+`;
+const SEASON_FORMATS = new Set(['TV', 'TV_SHORT', 'ONA', 'MOVIE', 'OVA']);
+const seasonMem = new Map<string, Promise<SeasonEntry[]>>();
+
+export function fetchSeasons(anilistId: string): Promise<SeasonEntry[]> {
+  let p = seasonMem.get(anilistId);
+  if (p) return p;
+  p = (async () => {
+    const seen = new Map<number, any>();
+    let frontier = [Number(anilistId)];
+    for (let depth = 0; depth < 8 && frontier.length && seen.size < 16; depth++) {
+      const nodes = await Promise.all(
+        frontier.map((id) =>
+          anilistRequest(SEASON_QUERY, { id })
+            .then((d) => d?.Media)
+            .catch(() => null),
+        ),
+      );
+      const next: number[] = [];
+      for (const m of nodes) {
+        if (!m || seen.has(m.id)) continue;
+        seen.set(m.id, m);
+        for (const e of m.relations?.edges ?? []) {
+          const n = e.node;
+          if (
+            (e.relationType === 'SEQUEL' || e.relationType === 'PREQUEL') &&
+            n?.type === 'ANIME' &&
+            SEASON_FORMATS.has(n.format) &&
+            !seen.has(n.id)
+          )
+            next.push(n.id);
+        }
+      }
+      frontier = [...new Set(next)];
+    }
+    const list = [...seen.values()]
+      .filter((m) => SEASON_FORMATS.has(m.format) || String(m.id) === anilistId)
+      .map((m) => {
+        const d = m.startDate ?? {};
+        return {
+          id: String(m.id),
+          title: m.title?.english || m.title?.romaji || 'Untitled',
+          image: m.coverImage?.large ?? '',
+          color: m.coverImage?.color ?? null,
+          format: m.format ?? '',
+          status: m.status ?? '',
+          episodes: m.episodes ?? null,
+          year: m.seasonYear ?? d.year ?? null,
+          sort: (d.year ?? 9999) * 10000 + (d.month ?? 12) * 100 + (d.day ?? 31),
+          label: '',
+        } as SeasonEntry;
+      })
+      .sort((a, b) => a.sort - b.sort || Number(a.id) - Number(b.id));
+    let n = 0;
+    for (const e of list) {
+      if (e.format === 'MOVIE') e.label = 'Movie';
+      else if (e.format === 'OVA') e.label = 'OVA';
+      else e.label = `Season ${++n}`;
+    }
+    return list;
+  })().catch(() => {
+    seasonMem.delete(anilistId);
+    return [] as SeasonEntry[];
+  });
+  seasonMem.set(anilistId, p);
   return p;
 }

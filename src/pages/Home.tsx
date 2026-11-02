@@ -19,6 +19,8 @@ import type { Anime } from '../hooks/interface';
 // Layout
 // ---------------------------------------------------------------------------
 const Page = styled.div`
+  position: relative;
+  isolation: isolate;
   display: flex;
   flex-direction: column;
 `;
@@ -31,6 +33,8 @@ const Body = styled.div`
   width: 100%;
   margin: 0 auto;
   padding-top: 1.25rem;
+  position: relative;
+  z-index: 1;
 
   @media (min-width: 1100px) {
     grid-template-columns: minmax(0, 1fr) 24rem;
@@ -54,6 +58,8 @@ const ErrorBanner = styled.div`
   align-items: center;
   justify-content: space-between;
   gap: 1rem;
+  position: relative;
+  z-index: 1;
   margin: 1.25rem auto 0;
   max-width: 105rem;
   padding: 0.9rem 1.1rem;

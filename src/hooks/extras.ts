@@ -72,64 +72,83 @@ export function useAudioCounts(id: string, enabled = true): AudioCounts | null {
 }
 
 // ---------------------------------------------------------------------------
-// Title logos (transparent PNGs), like the ones Miruro shows in its hero.
-// Looked up by AniList id through ani.zip, which exposes fanart "Clearlogo"
-// images. Cached for a week; a miss simply falls back to the text title.
+// TMDB artwork (title logo + HD backdrop) via our /api/tmdb function, which
+// keeps the TMDB key on the server. Without a key it answers `no-key` and the
+// UI falls back to the text title and the AniList banner.
 // ---------------------------------------------------------------------------
-const LOGO_TTL = 7 * 24 * 3600 * 1000;
-const logoMem = new Map<string, Promise<string | null>>();
+export interface TmdbArt {
+  logo: string | null;
+  backdrop: string | null;
+}
 
-function logoFromStorage(id: string): string | null | undefined {
+const ART_TTL = 7 * 24 * 3600 * 1000;
+const ART_MISS_TTL = 30 * 60 * 1000;
+const artMem = new Map<string, Promise<TmdbArt | null>>();
+
+function artFromStorage(id: string): TmdbArt | undefined {
   try {
-    const raw = localStorage.getItem(`logo:${id}`);
+    const raw = localStorage.getItem(`art2:${id}`);
     if (!raw) return undefined;
     const { t, v } = JSON.parse(raw);
-    if (Date.now() - t < LOGO_TTL) return v as string | null;
+    const found = v && (v.logo || v.backdrop);
+    if (Date.now() - t < (found ? ART_TTL : ART_MISS_TTL)) return v as TmdbArt;
   } catch {
     /* ignore */
   }
   return undefined;
 }
 
-export function fetchTitleLogo(id: string): Promise<string | null> {
-  let p = logoMem.get(id);
+export function fetchTmdbArt(
+  id: string,
+  opts: { type?: string; title?: string } = {},
+): Promise<TmdbArt | null> {
+  let p = artMem.get(id);
   if (p) return p;
 
-  const stored = logoFromStorage(id);
-  if (stored !== undefined) {
+  const stored = artFromStorage(id);
+  if (stored) {
     p = Promise.resolve(stored);
   } else {
+    const qs = new URLSearchParams({ id });
+    if (opts.type === 'MOVIE') qs.set('type', 'movie');
+    if (opts.title) qs.set('title', opts.title);
     p = (async () => {
-      const res = await fetch(`https://api.ani.zip/mappings?anilist_id=${id}`, {
-        signal: AbortSignal.timeout(6000),
-      });
-      if (!res.ok) throw new Error('logo lookup failed');
+      const res = await fetch(`/api/tmdb?${qs}`, { signal: AbortSignal.timeout(9000) });
+      if (!res.ok) throw new Error('tmdb lookup failed');
       const json = await res.json();
-      const images: any[] = Array.isArray(json?.images) ? json.images : [];
-      const logo =
-        images.find((i) => /clearlogo/i.test(i?.coverType || ''))?.url ?? null;
-      try {
-        localStorage.setItem(`logo:${id}`, JSON.stringify({ t: Date.now(), v: logo }));
-      } catch {
-        /* ignore */
+      const art: TmdbArt = { logo: json.logo ?? null, backdrop: json.backdrop ?? null };
+      // only remember definite answers (not "no key yet" / errors)
+      if (!json.reason || json.reason === 'unmapped') {
+        try {
+          localStorage.setItem(`art2:${id}`, JSON.stringify({ t: Date.now(), v: art }));
+        } catch {
+          /* ignore */
+        }
       }
-      return (logo as string | null) ?? null;
+      return art;
     })().catch(() => null);
   }
-  logoMem.set(id, p);
+  artMem.set(id, p);
   return p;
 }
 
-/** undefined = still looking, null = none found, string = logo url */
-export function useTitleLogo(id: string, enabled = true): string | null | undefined {
-  const [logo, setLogo] = useState<string | null | undefined>(undefined);
+/** Fetches TMDB art for several anime. A key is absent while the lookup is pending. */
+export function useTmdbArtMap(
+  items: { id: string; type?: string; title?: string }[],
+): Record<string, TmdbArt | null> {
+  const [map, setMap] = useState<Record<string, TmdbArt | null>>({});
+  const signature = items.map((i) => i.id).join(',');
   useEffect(() => {
-    if (!enabled) return;
     let alive = true;
-    fetchTitleLogo(id).then((l) => alive && setLogo(l));
+    for (const it of items) {
+      fetchTmdbArt(it.id, it).then((art) => {
+        if (alive) setMap((m) => (it.id in m ? m : { ...m, [it.id]: art }));
+      });
+    }
     return () => {
       alive = false;
     };
-  }, [id, enabled]);
-  return logo;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signature]);
+  return map;
 }

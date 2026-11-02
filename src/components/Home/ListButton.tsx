@@ -8,7 +8,7 @@ const pop = keyframes`
   100% { transform: scale(1); }
 `;
 
-const Btn = styled.button<{ $on: boolean; $variant: 'overlay' | 'hero' }>`
+const Btn = styled.button<{ $on: boolean; $variant: 'overlay' | 'hero'; $color: string }>`
   display: grid;
   place-items: center;
   padding: 0;
@@ -20,7 +20,7 @@ const Btn = styled.button<{ $on: boolean; $variant: 'overlay' | 'hero' }>`
     background-color 0.25s ease,
     color 0.25s ease;
 
-  ${({ $variant }) =>
+  ${({ $variant, $color }) =>
     $variant === 'hero'
       ? css`
           flex: none;
@@ -36,25 +36,29 @@ const Btn = styled.button<{ $on: boolean; $variant: 'overlay' | 'hero' }>`
         `
       : css`
           position: absolute;
-          top: 0.4rem;
-          right: 0.4rem;
+          top: 0.45rem;
+          right: 0.45rem;
           z-index: 3;
-          width: 1.7rem;
-          height: 1.7rem;
+          width: 1.9rem;
+          height: 1.9rem;
           border-radius: 50%;
-          background: rgba(20, 20, 27, 0.6);
-          backdrop-filter: blur(6px);
-          -webkit-backdrop-filter: blur(6px);
+          color: ${$color};
+          background: rgba(14, 14, 20, 0.78);
+          border: 1px solid rgba(255, 255, 255, 0.1);
+          box-shadow: 0 0.15rem 0.6rem rgba(0, 0, 0, 0.35);
+          backdrop-filter: blur(8px) saturate(140%);
+          -webkit-backdrop-filter: blur(8px) saturate(140%);
           &:hover {
-            background: rgba(20, 20, 27, 0.85);
+            background: rgba(14, 14, 20, 0.95);
           }
         `}
 
-  ${({ $on }) =>
+  ${({ $on, $color, $variant }) =>
     $on &&
     css`
-      background: #b7a9ff !important;
-      color: #0b0b10;
+      background: ${$variant === 'hero' ? '#b7a9ff' : $color} !important;
+      color: #0b0b10 !important;
+      border-color: transparent;
       animation: ${pop} 0.35s ease;
     `}
 
@@ -78,7 +82,17 @@ const Btn = styled.button<{ $on: boolean; $variant: 'overlay' | 'hero' }>`
   }
 `;
 
+// Use the anime's colour for the icon, unless it is too dark to read on the dark bubble.
+const readable = (hex?: string | null) => {
+  const m = /^#?([0-9a-f]{6})$/i.exec((hex || '').trim());
+  if (!m) return '#ffffff';
+  const n = parseInt(m[1], 16);
+  const [r, g, b] = [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+  return 0.299 * r + 0.587 * g + 0.114 * b < 95 ? '#ffffff' : `#${m[1]}`;
+};
+
 type Source = Pick<Anime, 'id' | 'title' | 'image'> & {
+  color?: string | null;
   type?: string;
   releaseDate?: number | string | null;
 };
@@ -108,6 +122,7 @@ export const ListButton = ({
       type='button'
       $on={on}
       $variant={variant}
+      $color={readable(anime.color)}
       aria-pressed={on}
       aria-label={on ? `Remove ${title} from My List` : `Add ${title} to My List`}
       title={on ? 'In My List' : 'Add to My List'}

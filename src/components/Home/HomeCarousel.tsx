@@ -1,25 +1,30 @@
 import { FC, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import styled, { keyframes } from 'styled-components';
 import { Link } from 'react-router-dom';
-import { FaPlay, FaInfoCircle } from 'react-icons/fa';
-import { useTitleLogo } from '../../hooks/extras';
+import { FaPlay } from 'react-icons/fa';
+import { FiInfo } from 'react-icons/fi';
+import { useAudioCounts, useTmdbArtMap, type TmdbArt } from '../../hooks/extras';
 import { ListButton } from './ListButton';
 import type { Anime } from '../../hooks/interface';
 
 const AUTO_MS = 8000;
-const titleOf = (a: Anime) => a.title?.english || a.title?.romaji || 'Untitled';
+const ART_WAIT_MS = 1600; // how long we wait for TMDB art before using the AniList banner
 
-// The hero is full-bleed: it cancels the body's padding (and max-width) so the
-// artwork reaches the screen edges and sits underneath the transparent navbar.
+const titleOf = (a: Anime) => a.title?.english || a.title?.romaji || 'Untitled';
+const clamp = (n: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, n));
+
+// ---------------------------------------------------------------------------
+// The hero section is full-bleed (it cancels the body padding) and sits under
+// the transparent navbar. Its artwork lives in a *fixed* layer behind the whole
+// page: it stays visible, blurring and dimming as you scroll, then fades out.
+// ---------------------------------------------------------------------------
 const Hero = styled.section`
   position: relative;
   width: 100vw;
   margin: -4rem 0 0 calc(50% - 50vw);
   height: min(80vh, 44rem);
   height: min(80svh, 44rem);
-  min-height: 28rem;
-  overflow: hidden;
-  background: #0b0b10;
+  min-height: 26rem;
   color: #fff;
   touch-action: pan-y;
   user-select: none;
@@ -27,7 +32,6 @@ const Hero = styled.section`
   @media (max-width: 500px) {
     margin-top: -3.5rem;
     height: min(76svh, 40rem);
-    min-height: 26rem;
   }
   @media (min-width: 1000px) {
     height: min(78vh, 42rem);
@@ -35,57 +39,91 @@ const Hero = styled.section`
 `;
 
 const fadeIn = keyframes`
-  from { opacity: 0; transform: scale(1.04); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; transform: translateY(0.4rem); }
+  to { opacity: 1; transform: none; }
+`;
+
+const shimmer = keyframes`
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+`;
+
+const Layer = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 100vh;
+  height: 100svh;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: var(--hero-o, 1);
+  will-change: opacity;
+`;
+
+const LayerImg = styled.img<{ $on: boolean }>`
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 22%;
+  opacity: ${({ $on }) => ($on ? 1 : 0)};
+  transition: opacity 0.9s ease;
+  filter: blur(var(--hero-b, 0px));
+  transform: scale(var(--hero-s, 1));
+  will-change: filter, transform;
+
+  @media (max-width: 700px) {
+    object-position: 60% center;
+  }
+`;
+
+const LayerDim = styled.div`
+  position: absolute;
+  inset: 0;
+  background: var(--global-primary-bg);
+  opacity: var(--hero-d, 0);
+`;
+
+const LayerFade = styled.div`
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    to bottom,
+    transparent 35%,
+    var(--global-primary-bg) 82%
+  );
+`;
+
+// legibility gradients for the hero text (scrolls away with the hero)
+const Shade = styled.div`
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to top,
+      var(--global-primary-bg) 0%,
+      rgba(11, 11, 16, 0.72) 24%,
+      rgba(11, 11, 16, 0.08) 58%,
+      rgba(11, 11, 16, 0.45) 100%
+    ),
+    linear-gradient(to right, rgba(11, 11, 16, 0.55) 0%, transparent 60%);
 `;
 
 const Slide = styled.div<{ $active: boolean }>`
   position: absolute;
   inset: 0;
+  z-index: 2;
   opacity: ${({ $active }) => ($active ? 1 : 0)};
   visibility: ${({ $active }) => ($active ? 'visible' : 'hidden')};
   transition:
     opacity 0.6s ease,
     visibility 0.6s;
   pointer-events: ${({ $active }) => ($active ? 'auto' : 'none')};
-`;
-
-const Backdrop = styled.img`
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  object-position: center 20%;
-  animation: ${fadeIn} 1.2s ease both;
-
-  @media (max-width: 700px) {
-    object-position: 62% center;
-  }
-`;
-
-const Shade = styled.div`
-  position: absolute;
-  inset: 0;
-  background:
-    linear-gradient(
-      to top,
-      var(--global-primary-bg) 0%,
-      rgba(11, 11, 16, 0.78) 26%,
-      rgba(11, 11, 16, 0.12) 62%,
-      rgba(11, 11, 16, 0.5) 100%
-    ),
-    linear-gradient(to right, rgba(11, 11, 16, 0.7) 0%, transparent 62%);
-
-  @media (max-width: 700px) {
-    background: linear-gradient(
-      to top,
-      var(--global-primary-bg) 0%,
-      rgba(11, 11, 16, 0.85) 30%,
-      rgba(11, 11, 16, 0.1) 65%,
-      rgba(11, 11, 16, 0.45) 100%
-    );
-  }
 `;
 
 const Content = styled.div`
@@ -95,18 +133,14 @@ const Content = styled.div`
   bottom: 0;
   max-width: 105rem;
   margin: 0 auto;
-  padding: 0 1.25rem 1.75rem;
+  padding: 0 1.25rem 1.5rem;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.7rem;
+  gap: 0.65rem;
 
   @media (min-width: 700px) {
-    padding: 0 2rem 3rem;
-    max-width: 105rem;
-  }
-  @media (min-width: 1000px) {
-    padding-bottom: 4rem;
+    padding: 0 2rem 2.75rem;
   }
 `;
 
@@ -114,76 +148,78 @@ const Logo = styled.img`
   display: block;
   width: auto;
   height: auto;
-  max-width: min(82%, 24rem);
-  max-height: 8.5rem;
+  max-width: min(66%, 19rem);
+  max-height: 6.5rem;
   object-fit: contain;
   object-position: left bottom;
-  filter: drop-shadow(0 0.2rem 1rem rgba(0, 0, 0, 0.6));
+  filter: drop-shadow(0 0.15rem 0.8rem rgba(0, 0, 0, 0.55));
   animation: ${fadeIn} 0.6s ease both;
 
   @media (min-width: 700px) {
-    max-width: 30rem;
-    max-height: 11rem;
+    max-width: 26rem;
+    max-height: 9rem;
   }
 `;
 
 const Title = styled.h2<{ $hidden?: boolean }>`
   margin: 0;
-  max-width: 36rem;
-  font-size: clamp(1.7rem, 6.4vw, 3rem);
+  max-width: 34rem;
+  font-size: clamp(1.5rem, 5.6vw, 2.6rem);
   font-weight: 800;
-  line-height: 1.08;
+  line-height: 1.1;
   letter-spacing: -0.02em;
-  visibility: ${({ $hidden }) => ($hidden ? 'hidden' : 'visible')};
-  text-shadow: 0 0.2rem 1.5rem rgba(0, 0, 0, 0.55);
+  text-shadow: 0 0.15rem 1.2rem rgba(0, 0, 0, 0.55);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+  visibility: ${({ $hidden }) => ($hidden ? 'hidden' : 'visible')};
 `;
 
 const Chips = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 0.55rem;
-  max-width: 42rem;
+  gap: 0.4rem;
+  max-width: 36rem;
 `;
 
+// frosted-glass pill
 const Chip = styled.span`
   display: inline-flex;
   align-items: center;
-  padding: 0.38rem 0.85rem;
+  padding: 0.3rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(24, 24, 32, 0.38);
+  backdrop-filter: blur(14px) saturate(140%);
+  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07);
+  font-size: 0.72rem;
+  font-weight: 400;
+  letter-spacing: 0.02em;
+  color: rgba(255, 255, 255, 0.78);
   white-space: nowrap;
-
 `;
 
 const Description = styled.p`
   margin: 0;
-  max-width: 40rem;
-  font-size: 0.9rem;
+  max-width: 36rem;
+  font-size: 0.84rem;
   line-height: 1.6;
-  color: rgba(255, 255, 255, 0.78);
+  color: rgba(255, 255, 255, 0.72);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 
   @media (min-width: 700px) {
-    font-size: 1rem;
+    font-size: 0.95rem;
   }
 `;
 
 const Actions = styled.div`
   display: flex;
-  gap: 0.5rem;
+  gap: 0.45rem;
   margin-top: 0.2rem;
 `;
 
@@ -191,18 +227,20 @@ const HeroButton = styled(Link)<{ $primary?: boolean }>`
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
   height: 2.5rem;
-  padding: 0 1.4rem;
+  padding: 0 1.25rem;
   border-radius: 0.5rem;
-  font-size: 0.9rem;
+  font-size: 0.86rem;
   font-weight: 600;
   text-decoration: none;
   color: ${({ $primary }) => ($primary ? '#0b0b10' : '#fff')};
   background: ${({ $primary }) =>
-    $primary ? '#f5f5f5' : 'rgba(58, 58, 66, 0.72)'};
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
+    $primary ? '#f5f5f5' : 'rgba(58, 58, 66, 0.62)'};
+  border: 1px solid
+    ${({ $primary }) => ($primary ? 'transparent' : 'rgba(255, 255, 255, 0.08)')};
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
   transition:
     transform 0.15s ease,
     background-color 0.2s ease;
@@ -211,69 +249,57 @@ const HeroButton = styled(Link)<{ $primary?: boolean }>`
     font-size: 0.95rem;
   }
   &:hover {
-    background: ${({ $primary }) => ($primary ? '#fff' : 'rgba(86, 86, 96, 0.85)')};
-    transform: translateY(-1px);
+    background: ${({ $primary }) => ($primary ? '#fff' : 'rgba(86, 86, 96, 0.8)')};
   }
   &:active {
     transform: scale(0.97);
   }
-
-  @media (max-width: 380px) {
-    padding: 0 1.05rem;
-  }
-`;
-
-const Dots = styled.div`
-  position: absolute;
-  top: 4.4rem;
-  right: 1.25rem;
-  z-index: 3;
-  display: flex;
-  gap: 0.35rem;
-
-  @media (min-width: 700px) {
-    top: auto;
-    bottom: 1.5rem;
-    right: 2rem;
-  }
-`;
-
-const Dot = styled.button<{ $active: boolean }>`
-  width: ${({ $active }) => ($active ? '1.6rem' : '0.45rem')};
-  height: 0.45rem;
-  padding: 0;
-  border: none;
-  border-radius: 999px;
-  cursor: pointer;
-  background: ${({ $active }) => ($active ? '#fff' : 'rgba(255,255,255,0.35)')};
-  transition:
-    width 0.3s ease,
-    background-color 0.3s ease;
 `;
 
 const SkeletonHero = styled(Hero)`
   background: linear-gradient(90deg, #14141b, #1c1c26, #14141b);
   background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
-  @keyframes shimmer {
-    0% {
-      background-position: 200% 0;
-    }
-    100% {
-      background-position: -200% 0;
-    }
-  }
+  animation: ${shimmer} 1.4s ease-in-out infinite;
 `;
 
-const HeroTitle = ({ anime, active }: { anime: Anime; active: boolean }) => {
-  const logo = useTitleLogo(anime.id);
+// ---------------------------------------------------------------------------
+const HeroTitle = ({
+  anime,
+  art,
+  waiting,
+}: {
+  anime: Anime;
+  art: TmdbArt | null | undefined;
+  waiting: boolean;
+}) => {
   const [broken, setBroken] = useState(false);
   const name = titleOf(anime);
-  if (logo && !broken) {
-    return <Logo src={logo} alt={name} onError={() => setBroken(true)} />;
+  if (art?.logo && !broken) {
+    return <Logo src={art.logo} alt={name} onError={() => setBroken(true)} />;
   }
-  // while the lookup is pending keep the layout but don't flash the text title
-  return <Title $hidden={active && logo === undefined}>{name}</Title>;
+  // keep the layout but don't flash the text title while TMDB is still answering
+  return <Title $hidden={waiting}>{name}</Title>;
+};
+
+const HeroChips = ({ anime, active }: { anime: Anime; active: boolean }) => {
+  const counts = useAudioCounts(anime.id, active && anime.status !== 'Not yet aired');
+  const eps = counts?.sub || anime.totalEpisodes || anime.currentEpisode || 0;
+  const chips = [
+    eps
+      ? `${eps} Episode${eps === 1 ? '' : 's'}`
+      : anime.type
+        ? anime.type.replace('_', ' ')
+        : null,
+    anime.releaseDate ? String(anime.releaseDate) : null,
+    ...(anime.genres ?? []).slice(0, 3),
+  ].filter(Boolean) as string[];
+  return (
+    <Chips>
+      {chips.map((c) => (
+        <Chip key={c}>{c}</Chip>
+      ))}
+    </Chips>
+  );
 };
 
 interface HomeCarouselProps {
@@ -282,10 +308,12 @@ interface HomeCarouselProps {
   error?: string | null;
 }
 
-
 export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
-  const [index, setIndex] = useState(0);
+  const [pos, setPos] = useState({ cur: 0, prev: -1 });
+  const [settled, setSettled] = useState(false);
+  const [failed, setFailed] = useState<Record<string, boolean>>({});
   const touchX = useRef<number | null>(null);
+  const layerRef = useRef<HTMLDivElement>(null);
 
   // Prefer slides with real banner art; fall back to posters if none have it.
   const slides = useMemo(() => {
@@ -294,10 +322,21 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
     return (withBanner.length ? withBanner : withText).slice(0, 8);
   }, [data]);
 
+  const arts = useTmdbArtMap(
+    slides.map((a) => ({ id: a.id, type: a.type, title: titleOf(a) })),
+  );
+
+  useEffect(() => {
+    if (!slides.length) return;
+    setSettled(false);
+    const id = window.setTimeout(() => setSettled(true), ART_WAIT_MS);
+    return () => window.clearTimeout(id);
+  }, [slides]);
+
   const go = useCallback(
     (dir: number) => {
       if (!slides.length) return;
-      setIndex((i) => (i + dir + slides.length) % slides.length);
+      setPos((p) => ({ cur: (p.cur + dir + slides.length) % slides.length, prev: p.cur }));
     },
     [slides.length],
   );
@@ -307,13 +346,50 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
     if (slides.length < 2) return;
     const id = window.setTimeout(() => go(1), AUTO_MS);
     return () => window.clearTimeout(id);
-  }, [index, slides.length, go]);
+  }, [pos.cur, slides.length, go]);
 
   useEffect(() => {
-    if (index >= slides.length) setIndex(0);
-  }, [slides.length, index]);
+    if (pos.cur >= slides.length && slides.length) setPos({ cur: 0, prev: -1 });
+  }, [slides.length, pos.cur]);
+
+  // Scroll: blur + dim the backdrop, then fade it out completely.
+  useEffect(() => {
+    const el = layerRef.current;
+    if (!el) return;
+    let raf = 0;
+    const update = () => {
+      raf = 0;
+      const y = window.scrollY;
+      const vh = window.innerHeight || 800;
+      const blurP = clamp(y / (vh * 0.9));
+      const fadeP = clamp((y - vh * 0.2) / (vh * 1.1));
+      const eased = fadeP * fadeP * (3 - 2 * fadeP);
+      el.style.setProperty('--hero-b', `${(blurP * 14).toFixed(1)}px`);
+      el.style.setProperty('--hero-s', (1 + blurP * 0.06).toFixed(3));
+      el.style.setProperty('--hero-d', (clamp(y / (vh * 0.7)) * 0.5).toFixed(3));
+      el.style.setProperty('--hero-o', (1 - eased).toFixed(3));
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(update);
+    };
+    update();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    window.addEventListener('resize', onScroll);
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [loading, slides.length]);
 
   if (loading || !slides.length) return <SkeletonHero aria-busy='true' />;
+
+  const srcFor = (a: Anime): string | null => {
+    const art = arts[a.id];
+    if (art === undefined && !settled) return null; // still waiting for TMDB
+    if (art?.backdrop && !failed[a.id]) return art.backdrop;
+    return a.cover || a.image || null;
+  };
 
   return (
     <Hero
@@ -325,42 +401,42 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
         if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1);
       }}
     >
-      {slides.map((anime, i) => {
-        const active = i === index;
-        const chips = [
-          anime.totalEpisodes
-            ? `${anime.totalEpisodes} Episode${anime.totalEpisodes === 1 ? '' : 's'}`
-            : anime.type
-              ? anime.type.replace('_', ' ')
-              : null,
-          anime.releaseDate ? String(anime.releaseDate) : null,
-          ...(anime.genres ?? []).slice(0, 3),
-        ].filter(Boolean) as string[];
+      <Layer ref={layerRef} aria-hidden>
+        {slides.map((a, i) => {
+          if (i !== pos.cur && i !== pos.prev) return null;
+          const src = srcFor(a);
+          if (!src) return null;
+          return (
+            <LayerImg
+              key={`${a.id}:${src}`}
+              src={src}
+              alt=''
+              $on={i === pos.cur}
+              decoding='async'
+              onError={() => setFailed((f) => ({ ...f, [a.id]: true }))}
+            />
+          );
+        })}
+        <LayerDim />
+        <LayerFade />
+      </Layer>
+      <Shade />
 
+      {slides.map((anime, i) => {
+        const active = i === pos.cur;
+        const art = arts[anime.id];
         return (
           <Slide key={anime.id} $active={active} aria-hidden={!active}>
-            {active && (
-              <Backdrop
-                src={anime.cover || anime.image}
-                alt=''
-                loading={i === 0 ? 'eager' : 'lazy'}
-              />
-            )}
-            <Shade />
             <Content>
-              <HeroTitle anime={anime} active={active} />
-              <Chips>
-                {chips.map((c) => (
-                  <Chip key={c}>{c}</Chip>
-                ))}
-              </Chips>
+              <HeroTitle anime={anime} art={art} waiting={art === undefined && !settled} />
+              <HeroChips anime={anime} active={active} />
               <Description>{anime.description}</Description>
               <Actions>
                 <HeroButton to={`/watch/${anime.id}`} $primary tabIndex={active ? 0 : -1}>
                   <FaPlay /> Watch Now
                 </HeroButton>
                 <HeroButton to={`/anime/${anime.id}`} tabIndex={active ? 0 : -1}>
-                  <FaInfoCircle /> Details
+                  <FiInfo /> Details
                 </HeroButton>
                 <ListButton anime={anime} variant='hero' />
               </Actions>
@@ -368,19 +444,6 @@ export const HomeCarousel: FC<HomeCarouselProps> = ({ data = [], loading }) => {
           </Slide>
         );
       })}
-
-      {slides.length > 1 && (
-        <Dots>
-          {slides.map((a, i) => (
-            <Dot
-              key={a.id}
-              $active={i === index}
-              aria-label={`Show slide ${i + 1}`}
-              onClick={() => setIndex(i)}
-            />
-          ))}
-        </Dots>
-      )}
     </Hero>
   );
 };

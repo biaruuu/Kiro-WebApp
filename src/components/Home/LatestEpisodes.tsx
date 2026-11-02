@@ -75,11 +75,11 @@ const Segment = styled.div`
 `;
 
 const SegButton = styled.button<{ $active: boolean }>`
-  min-width: 3rem;
-  padding: 0.4rem 0.8rem;
+  min-width: 2.7rem;
+  padding: 0.32rem 0.7rem;
   border: none;
   border-radius: 999px;
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   font-weight: 600;
   cursor: pointer;
   color: ${({ $active }) => ($active ? '#0b0b10' : 'var(--global-text)')};
@@ -89,9 +89,9 @@ const SegButton = styled.button<{ $active: boolean }>`
     color 0.2s ease;
 
   @media (min-width: 700px) {
-    min-width: 3.6rem;
-    padding: 0.5rem 1rem;
-    font-size: 0.92rem;
+    min-width: 3.4rem;
+    padding: 0.45rem 0.95rem;
+    font-size: 0.86rem;
   }
 `;
 
@@ -101,18 +101,18 @@ const Pager = styled.div`
   padding: 0.2rem;
   border-radius: 999px;
   border: 1px solid var(--global-border);
-  font-size: 0.82rem;
+  font-size: 0.74rem;
   font-weight: 600;
   color: var(--global-text);
 
   span {
-    min-width: 2rem;
+    min-width: 1.8rem;
     text-align: center;
   }
   @media (min-width: 700px) {
-    font-size: 0.92rem;
+    font-size: 0.86rem;
     span {
-      min-width: 2.6rem;
+      min-width: 2.4rem;
     }
   }
 `;
@@ -120,14 +120,14 @@ const Pager = styled.div`
 const PagerButton = styled.button`
   display: grid;
   place-items: center;
-  width: 1.7rem;
-  height: 1.7rem;
+  width: 1.5rem;
+  height: 1.5rem;
   padding: 0;
   border: none;
   border-radius: 50%;
   background: transparent;
   color: var(--global-text-muted);
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   cursor: pointer;
 
   &:hover:not(:disabled) {
@@ -220,27 +220,28 @@ const Card = styled(Link)<{ $color?: string }>`
     justify-content: space-between;
     align-items: baseline;
     gap: 0.3rem;
-    padding: 0.5rem 0.55rem;
+    padding: 0.45rem 0.5rem;
     color: #fff;
-    font-weight: 600;
-    font-size: 0.82rem;
+    font-weight: 500;
+    font-size: 0.68rem;
     text-shadow: 0 1px 6px rgba(0, 0, 0, 0.6);
     white-space: nowrap;
   }
   .overlay small {
-    font-size: 0.78rem;
-    font-weight: 500;
-    opacity: 0.9;
+    font-size: 0.66rem;
+    font-weight: 400;
+    opacity: 0.85;
   }
   .meta {
     display: flex;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-    margin: 0.55rem 0 0.4rem;
+    flex-wrap: nowrap;
+    gap: 0.2rem;
+    margin: 0.5rem 0 0.35rem;
+    min-width: 0;
   }
   .name {
     margin: 0;
-    font-size: 0.86rem;
+    font-size: 0.76rem;
     font-weight: 500;
     line-height: 1.4;
     display: -webkit-box;
@@ -253,16 +254,28 @@ const Card = styled(Link)<{ $color?: string }>`
     color: ${({ $color }) => $color || 'var(--primary-accent)'};
   }
 
+  /* + button: revealed on hover for mouse users (always visible on touch) */
+  @media (hover: hover) {
+    .poster > button:not([aria-pressed='true']) {
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    &:hover .poster > button,
+    .poster > button:focus-visible {
+      opacity: 1;
+    }
+  }
+
   @media (min-width: 700px) {
     .overlay {
-      font-size: 0.95rem;
-      padding: 0.65rem 0.75rem;
+      font-size: 0.85rem;
+      padding: 0.6rem 0.7rem;
     }
     .overlay small {
-      font-size: 0.88rem;
+      font-size: 0.78rem;
     }
     .name {
-      font-size: 0.98rem;
+      font-size: 0.9rem;
     }
   }
 `;
@@ -270,25 +283,30 @@ const Card = styled(Link)<{ $color?: string }>`
 const MetaChip = styled.span<{ $tint?: string }>`
   display: inline-flex;
   align-items: center;
-  gap: 0.22rem;
-  padding: 0.24rem 0.38rem;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  gap: 0.2rem;
+  padding: 0.22rem 0.32rem;
   border-radius: 0.4rem;
   background: ${({ $tint }) =>
     $tint ? `color-mix(in srgb, ${$tint} 22%, var(--global-secondary-bg))` : 'var(--global-secondary-bg)'};
   color: var(--global-text-muted);
-  font-size: 0.68rem;
+  font-size: 0.62rem;
   font-weight: 600;
   line-height: 1;
   white-space: nowrap;
 
   svg {
-    font-size: 0.72rem;
+    flex: none;
+    font-size: 0.68rem;
   }
   @media (min-width: 700px) {
-    padding: 0.3rem 0.5rem;
-    font-size: 0.78rem;
+    padding: 0.28rem 0.45rem;
+    font-size: 0.72rem;
     svg {
-      font-size: 0.82rem;
+      font-size: 0.78rem;
     }
   }
 `;
@@ -318,9 +336,25 @@ const Empty = styled.p`
   color: var(--global-text-muted);
 `;
 
+const typeLabel = (t?: string) => {
+  switch (t) {
+    case 'TV_SHORT':
+      return 'SHORT';
+    case 'SPECIAL':
+      return 'SP';
+    case 'MUSIC':
+      return 'MV';
+    default:
+      return (t || '').replace('_', ' ');
+  }
+};
+
 const EpisodeTile = ({ a, audio }: { a: RecentAnime; audio: Audio }) => {
   const name = a.title.english || a.title.romaji || 'Untitled';
   const counts = useAudioCounts(a.id);
+  // Dub tab: only shows that do have a dub (once we know).
+  if (audio === 'dub' && counts && counts.dub === 0) return null;
+
   const sub = counts?.sub || a.episode;
   const dub = counts?.dub || 0;
   return (
@@ -330,7 +364,7 @@ const EpisodeTile = ({ a, audio }: { a: RecentAnime; audio: Audio }) => {
       title={`${name} - Episode ${a.episode}`}
     >
       <div className='poster'>
-        <img src={a.image} alt={name} loading='lazy' />
+        <img src={a.image} alt={name} loading='lazy' decoding='async' />
         <span className='play'>
           <FaPlay />
         </span>
@@ -341,15 +375,16 @@ const EpisodeTile = ({ a, audio }: { a: RecentAnime; audio: Audio }) => {
         </div>
       </div>
       <div className='meta'>
-        <MetaChip $tint={a.color || undefined}>
-          <FaClosedCaptioning /> {sub}
-        </MetaChip>
-        {dub > 0 && (
+        {audio === 'sub' ? (
+          <MetaChip $tint={a.color || undefined}>
+            <FaClosedCaptioning /> {sub}
+          </MetaChip>
+        ) : dub > 0 ? (
           <MetaChip $tint={a.color || undefined}>
             <FaMicrophone /> {dub}
           </MetaChip>
-        )}
-        {a.type && <MetaChip>{a.type.replace('_', ' ')}</MetaChip>}
+        ) : null}
+        {a.type && <MetaChip>{typeLabel(a.type)}</MetaChip>}
         {a.releaseDate ? <MetaChip>{a.releaseDate}</MetaChip> : null}
       </div>
       <p className='name'>{name}</p>

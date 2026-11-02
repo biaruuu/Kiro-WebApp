@@ -137,6 +137,18 @@ function pickBackdrop(backdrops: any[]) {
   return [...(textless.length ? textless : pool)].sort((a, b) => rank(b) - rank(a))[0];
 }
 
+function pickMany(list: any[] | undefined, size: string, max: number) {
+  return [...(list ?? [])]
+    .sort((a, b) => rank(b) - rank(a))
+    .slice(0, max)
+    .map((i) => ({
+      thumb: `${IMG}/${size}${i.file_path}`,
+      full: `${IMG}/original${i.file_path}`,
+      w: i.width,
+      h: i.height,
+    }));
+}
+
 async function imagesFor(id: string, kind: Kind, cred: ReturnType<typeof credentials>) {
   return tmdb(`/${kind}/${id}/images`, { include_image_language: 'en,ja,null' }, cred);
 }
@@ -194,9 +206,17 @@ export default async function handler(req: any, res: any) {
         ? 's-maxage=86400, stale-while-revalidate=604800'
         : 's-maxage=1800, stale-while-revalidate=3600',
     );
+    const gallery = req.query?.gallery
+      ? {
+          backdrops: pickMany(images?.backdrops, 'w780', 30),
+          posters: pickMany(images?.posters, 'w342', 24),
+          logos: pickMany(images?.logos, 'w500', 12),
+        }
+      : undefined;
     return res.status(200).json({
       logo: logo ? `${IMG}/w500${logo.file_path}` : null,
       backdrop: backdrop ? `${IMG}/original${backdrop.file_path}` : null,
+      ...(gallery ? { gallery } : {}),
       ...(tried || title ? {} : { reason: 'unmapped' }),
     });
   } catch (error: any) {

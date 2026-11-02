@@ -331,7 +331,11 @@ export const Navbar = () => {
     setMenuOpen(false);
   }, [location.pathname]);
 
-  const isHome = location.pathname === '/' || location.pathname === '/home';
+  // pages that start with a full-bleed artwork hero (navbar floats over it)
+  const isHome =
+    location.pathname === '/' ||
+    location.pathname === '/home' ||
+    location.pathname.startsWith('/anime/');
   // Transparent over the home hero; solid everywhere else / once scrolled.
   const solid =
     !isHome || scrolled || menuOpen || isInputVisible || search.isDropdownOpen;

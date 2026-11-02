@@ -9,7 +9,7 @@ const TITLE = 'title { romaji english native userPreferred }';
 const COVER = 'coverImage { extraLarge large color }';
 
 const MINI_MEDIA = `
-  id idMal ${TITLE} status episodes format averageScore ${COVER} bannerImage
+  id idMal type ${TITLE} status episodes format averageScore ${COVER} bannerImage
 `;
 
 const MEDIA_FIELDS = `
@@ -24,15 +24,17 @@ const MEDIA_FIELDS = `
 
 const DETAIL_FIELDS = `
   ${MEDIA_FIELDS}
+  rankings { rank type allTime }
+  allStudios: studios { edges { isMain node { name } } }
   relations { edges { relationType(version: 2) node { ${MINI_MEDIA} } } }
   recommendations(sort: RATING_DESC, perPage: 12) {
     nodes { mediaRecommendation { ${MINI_MEDIA} } }
   }
-  characters(sort: [ROLE, RELEVANCE], perPage: 12) {
+  characters(sort: [ROLE, RELEVANCE], perPage: 25) {
     edges {
       role
       node { id name { full native } image { large } }
-      voiceActors(language: JAPANESE) { id name { full native } image { large } languageV2 }
+      voiceActors { id name { full native } image { large } languageV2 }
     }
   }
 `;
@@ -151,6 +153,12 @@ export function mapMedia(m: any) {
     duration: m.duration ?? null,
     genres: m.genres ?? [],
     studios: (m.studios?.nodes ?? []).map((s: any) => s.name),
+    allStudios: (m.allStudios?.edges ?? []).map((e: any) => ({
+      name: e.node?.name,
+      isMain: !!e.isMain,
+    })),
+    popularityRank:
+      (m.rankings ?? []).find((r: any) => r.type === 'POPULAR' && r.allTime)?.rank ?? null,
     subOrDub: 'sub',
     season: m.season ?? '',
     popularity: m.popularity ?? 0,
@@ -169,9 +177,11 @@ export function mapMedia(m: any) {
     artwork: [],
     episodes: [],
     recommendations: (m.recommendations?.nodes ?? [])
-      .filter((n: any) => n?.mediaRecommendation)
+      .filter((n: any) => n?.mediaRecommendation && n.mediaRecommendation.type !== 'MANGA')
       .map((n: any) => mapMini(n.mediaRecommendation)),
-    relations: (m.relations?.edges ?? []).map((e: any) =>
+    relations: (m.relations?.edges ?? [])
+      .filter((e: any) => e?.node && e.node.type !== 'MANGA')
+      .map((e: any) =>
       mapMini(e.node, { relationType: e.relationType }),
     ),
     characters: (m.characters?.edges ?? []).map((e: any) => ({

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchProviderEpisodes } from './anivexa';
+import { fetchMap, fetchProviderEpisodes } from './anivexa';
 
 // ---------------------------------------------------------------------------
 // Tiny concurrency-limited queue so lists of cards don't fire dozens of
@@ -151,4 +151,135 @@ export function useTmdbArtMap(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature]);
   return map;
+}
+
+// ---------------------------------------------------------------------------
+// Artwork gallery (TMDB backdrops / posters / logos) for the details page.
+// ---------------------------------------------------------------------------
+export interface GalleryImage {
+  thumb: string;
+  full: string;
+  w?: number;
+  h?: number;
+}
+export interface TmdbGallery {
+  backdrops: GalleryImage[];
+  posters: GalleryImage[];
+  logos: GalleryImage[];
+}
+
+const galleryMem = new Map<string, Promise<TmdbGallery | null>>();
+
+export function fetchTmdbGallery(
+  id: string,
+  opts: { type?: string; title?: string } = {},
+): Promise<TmdbGallery | null> {
+  let p = galleryMem.get(id);
+  if (p) return p;
+  const qs = new URLSearchParams({ id, gallery: '1' });
+  if (opts.type === 'MOVIE') qs.set('type', 'movie');
+  if (opts.title) qs.set('title', opts.title);
+  p = fetch(`/api/tmdb?${qs}`, { signal: AbortSignal.timeout(12000) })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((j) => (j?.gallery as TmdbGallery) ?? null)
+    .catch(() => null);
+  galleryMem.set(id, p);
+  return p;
+}
+
+// ---------------------------------------------------------------------------
+// MAL score (Jikan) and cross-site ids (Anivexa /map) for the details page.
+// ---------------------------------------------------------------------------
+const malMem = new Map<string, Promise<number | null>>();
+
+export function fetchMalScore(malId: string): Promise<number | null> {
+  let p = malMem.get(malId);
+  if (!p) {
+    p = fetch(`https://api.jikan.moe/v4/anime/${malId}`, {
+      signal: AbortSignal.timeout(7000),
+    })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => (typeof j?.data?.score === 'number' ? (j.data.score as number) : null))
+      .catch(() => null);
+    malMem.set(malId, p);
+  }
+  return p;
+}
+
+export interface ExternalIds {
+  anidb?: string;
+  kitsu?: string;
+  tvdb?: string;
+  tmdb?: string;
+  tmdbKind?: 'tv' | 'movie';
+  imdb?: string;
+  anisearch?: string;
+}
+
+const SITES: [keyof ExternalIds, RegExp][] = [
+  ['anidb', /anidb/i],
+  ['kitsu', /kitsu/i],
+  ['tvdb', /tvdb/i],
+  ['tmdb', /tmdb|themoviedb/i],
+  ['imdb', /imdb/i],
+  ['anisearch', /anisearch/i],
+];
+
+const idOf = (v: any): string | null => {
+  if (typeof v === 'number' && v > 0) return String(v);
+  if (typeof v === 'string' && v.trim()) {
+    const m = v.match(/(tt\d+|\d+)\s*$/);
+    return m ? m[1] : null;
+  }
+  if (v && typeof v === 'object') return idOf(v.id ?? v.value ?? v.providerId);
+  return null;
+};
+
+export function parseExternalIds(map: any): ExternalIds {
+  const out: ExternalIds = {};
+  const visit = (node: any, depth = 0) => {
+    if (!node || typeof node !== 'object' || depth > 5) return;
+    if (Array.isArray(node)) {
+      for (const item of node) {
+        const label = String(item?.provider ?? item?.site ?? item?.name ?? item?.source ?? '');
+        for (const [key, re] of SITES) {
+          if (!out[key] && re.test(label)) {
+            const id = idOf(item);
+            if (id) (out as any)[key] = id;
+          }
+        }
+        visit(item, depth + 1);
+      }
+      return;
+    }
+    for (const [k, v] of Object.entries(node)) {
+      for (const [key, re] of SITES) {
+        if (!out[key] && re.test(k)) {
+          const id = idOf(v);
+          if (id) (out as any)[key] = id;
+          if (key === 'tmdb' && v && typeof v === 'object') {
+            const t = String((v as any).type ?? (v as any).media_type ?? '').toLowerCase();
+            if (t.includes('movie')) out.tmdbKind = 'movie';
+            else if (t) out.tmdbKind = 'tv';
+          }
+        }
+      }
+      visit(v, depth + 1);
+    }
+  };
+  visit(map);
+  return out;
+}
+
+const idsMem = new Map<string, Promise<ExternalIds>>();
+
+export function fetchExternalIds(anilistId: string): Promise<ExternalIds> {
+  let p = idsMem.get(anilistId);
+  if (!p) {
+    p = fetchMap(anilistId)
+      .then(parseExternalIds)
+      .catch(() => ({}) as ExternalIds);
+    idsMem.set(anilistId, p);
+  }
+  return p;
 }

@@ -148,6 +148,16 @@ const cleanEpisodes = (list: any): StreamEpisode[] =>
     }))
     .sort((a, b) => a.number - b.number);
 
+/** Cross-platform ids (MAL, TVDB, TMDB, Kitsu, AniDB, ...) for an AniList id. */
+export async function fetchMap(anilistId: string): Promise<any> {
+  const key = `map:${anilistId}`;
+  const cached = cacheGet<any>(key);
+  if (cached) return cached;
+  const data = await getJson(`map/${anilistId}`, 12000);
+  if (data) cacheSet(key, data);
+  return data;
+}
+
 /** All providers that returned episodes for this AniList id. */
 export async function fetchProviderEpisodes(
   anilistId: string,

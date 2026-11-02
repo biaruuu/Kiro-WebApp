@@ -104,10 +104,11 @@ const LayerFade = styled.div`
     linear-gradient(to bottom, rgba(11, 11, 16, 0.6) 0%, transparent 16%),
     linear-gradient(
       to bottom,
-      transparent 24%,
-      rgba(11, 11, 16, 0.5) 46%,
-      rgba(11, 11, 16, 0.84) 68%,
-      var(--global-primary-bg) 96%
+      transparent 18%,
+      rgba(11, 11, 16, 0.38) 34%,
+      rgba(11, 11, 16, 0.72) 50%,
+      rgba(11, 11, 16, 0.9) 68%,
+      var(--global-primary-bg) 94%
     );
 
   @media (min-width: 900px) {
@@ -199,21 +200,15 @@ const Chip = styled.span`
   align-items: center;
   padding: 0.3rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.16),
-    rgba(255, 255, 255, 0.05)
-  );
-  backdrop-filter: blur(18px) saturate(170%);
-  -webkit-backdrop-filter: blur(18px) saturate(170%);
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.18),
-    0 0.2rem 0.8rem rgba(0, 0, 0, 0.18);
+  /* neutral dark glass (no saturation boost, so the art never tints the chip) */
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(22, 22, 28, 0.46);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   font-size: 0.72rem;
   font-weight: 400;
   letter-spacing: 0.02em;
-  color: rgba(255, 255, 255, 0.88);
+  color: rgba(255, 255, 255, 0.82);
   white-space: nowrap;
 `;
 
@@ -222,7 +217,8 @@ const Description = styled.p`
   max-width: 36rem;
   font-size: 0.84rem;
   line-height: 1.6;
-  color: rgba(255, 255, 255, 0.72);
+  color: rgba(255, 255, 255, 0.8);
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.7);
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
@@ -252,11 +248,9 @@ const HeroButton = styled(Link)<{ $primary?: boolean }>`
   text-decoration: none;
   color: ${({ $primary }) => ($primary ? '#0b0b10' : '#fff')};
   background: ${({ $primary }) =>
-    $primary ? '#f5f5f5' : 'rgba(52, 52, 60, 0.62)'};
-  box-shadow: ${({ $primary }) =>
-    $primary ? 'none' : 'inset 0 1px 0 rgba(255, 255, 255, 0.08)'};
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
+    $primary ? '#f5f5f5' : 'rgba(36, 36, 42, 0.7)'};
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   transition:
     transform 0.15s ease,
     background-color 0.2s ease;

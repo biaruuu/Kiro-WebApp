@@ -27,10 +27,9 @@ const Btn = styled.button<{ $on: boolean; $variant: 'overlay' | 'hero'; $color: 
           width: 2.5rem;
           height: 2.5rem;
           border-radius: 0.5rem;
-          background: rgba(52, 52, 60, 0.62);
-          backdrop-filter: blur(14px) saturate(140%);
-          -webkit-backdrop-filter: blur(14px) saturate(140%);
-          box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          background: rgba(36, 36, 42, 0.7);
+          backdrop-filter: blur(10px);
+          -webkit-backdrop-filter: blur(10px);
           &:hover {
             background: rgba(86, 86, 96, 0.8);
           }

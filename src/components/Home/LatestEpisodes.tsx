@@ -332,13 +332,12 @@ const Card = styled(Link)<{ $color?: string }>`
     pointer-events: auto;
     transform: none;
   }
-  @media (hover: hover) {
-    &:hover .poster > button,
-    .poster > button:focus-visible {
-      opacity: 1;
-      pointer-events: auto;
-      transform: none;
-    }
+  /* whenever the play overlay shows (hover / touch-hover), the + shows with it */
+  &:hover .poster > button,
+  .poster > button:focus-visible {
+    opacity: 1;
+    pointer-events: auto;
+    transform: none;
   }
 
   @media (min-width: 700px) {

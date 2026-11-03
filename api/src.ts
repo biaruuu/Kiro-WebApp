@@ -12,14 +12,19 @@
 //   GET /api/src?k=map&id=<anilistId>   -> cross-site ids
 //
 // Env (Vercel):
-//   STREAM_API   upstream base url (falls back to VITE_STREAM_API / the default)
+//   STREAM_API   upstream base url(s), comma separated (falls back to VITE_STREAM_API / the default)
 //   SRC_SECRET   any long random string used to seal tokens (recommended)
 
-const UPSTREAM = (
+// One or more upstream streaming APIs (comma separated). Providers from every
+// upstream are merged, so adding another instance adds more sources.
+const UPSTREAMS = (
   process.env.STREAM_API?.trim() ||
   process.env.VITE_STREAM_API?.trim() ||
   'https://anibiartv-api.vercel.app'
-).replace(/\/+$/, '');
+)
+  .split(',')
+  .map((u) => u.trim().replace(/\/+$/, ''))
+  .filter(Boolean);
 
 const SECRET = process.env.SRC_SECRET?.trim() || 'animallu-private-gateway-v1';
 
@@ -92,8 +97,8 @@ async function open<T = any>(token: string): Promise<T | null> {
 }
 
 // --- helpers --------------------------------------------------------------------
-async function upstream(path: string, timeoutMs = 20000): Promise<any> {
-  const res = await fetch(`${UPSTREAM}/${path.replace(/^\/+/, '')}`, {
+async function upstream(base: string, path: string, timeoutMs = 20000): Promise<any> {
+  const res = await fetch(`${base}/${path.replace(/^\/+/, '')}`, {
     headers: { Accept: 'application/json' },
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -121,19 +126,33 @@ const isHttp = (u: unknown): u is string => typeof u === 'string' && /^https?:\/
 
 // --- handlers -------------------------------------------------------------------
 async function episodes(id: string) {
-  const data = await upstream(`episodes/${id}`, 25000);
-  const entries = Object.entries<any>(data ?? {})
-    .filter(([name, v]) => !NON_PROVIDER_KEYS.has(name) && v && !v.error)
-    .sort((a, b) => rankOf(a[0]) - rankOf(b[0]));
+  const settled = await Promise.allSettled(
+    UPSTREAMS.map((base) => upstream(base, `episodes/${id}`, 25000).then((d) => ({ base, d }))),
+  );
+  const ok = settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
+  if (!ok.length) throw Object.assign(new Error('upstream'), { status: 502 });
+
+  // same provider on several upstreams: keep the one with the most episodes
+  const best = new Map<string, { base: string; value: any; size: number }>();
+  for (const { base, d } of ok) {
+    for (const [name, value] of Object.entries<any>(d ?? {})) {
+      if (NON_PROVIDER_KEYS.has(name) || !value || value.error) continue;
+      const size = (value.episodes?.sub?.length ?? 0) + (value.episodes?.dub?.length ?? 0);
+      if (!size) continue;
+      const prev = best.get(name);
+      if (!prev || size > prev.size) best.set(name, { base, value, size });
+    }
+  }
+  const entries = [...best.entries()].sort((a, b) => rankOf(a[0]) - rankOf(b[0]));
 
   const out: Record<string, any> = {};
-  for (const [name, value] of entries) {
+  for (const [name, { base, value }] of entries) {
     const convert = async (list: any) =>
       Promise.all(
         (Array.isArray(list) ? list : [])
           .filter((e) => e && typeof e.id === 'string' && /^watch\//.test(e.id))
           .map(async (e) => ({
-            id: await seal({ p: e.id }),
+            id: await seal({ p: e.id, b: base }),
             number: e.number,
             title: e.title ?? null,
             description: e.description ?? null,
@@ -153,12 +172,13 @@ async function episodes(id: string) {
 }
 
 async function watch(token: string) {
-  const opened = await open<{ p?: string }>(token);
+  const opened = await open<{ p?: string; b?: string }>(token);
   const path = opened?.p;
+  const base = opened?.b && UPSTREAMS.includes(opened.b) ? opened.b : UPSTREAMS[0];
   if (!path || !/^watch\/[\w.-]+\/[\w.-]+\/(sub|dub)\/[\w.%:-]+$/i.test(path)) {
     throw Object.assign(new Error('bad token'), { status: 400 });
   }
-  const data = await upstream(path, 28000);
+  const data = await upstream(base, path, 28000);
   const headerRef: string | undefined =
     data?.headers?.Referer ?? data?.headers?.referer ?? data?.headers?.referrer;
 
@@ -239,7 +259,16 @@ export default async function handler(req: any, res: any) {
       return res.status(200).json(body);
     }
     if (kind === 'map' && id) {
-      const body = await upstream(`map/${id}`, 12000);
+      let body: any = null;
+      for (const base of UPSTREAMS) {
+        try {
+          body = await upstream(base, `map/${id}`, 12000);
+          break;
+        } catch {
+          /* try the next one */
+        }
+      }
+      if (!body) throw Object.assign(new Error('upstream'), { status: 502 });
       res.setHeader('Cache-Control', 's-maxage=3600, stale-while-revalidate=86400');
       return res.status(200).json(body);
     }

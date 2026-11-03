@@ -18,7 +18,7 @@ const STREAM_API = (
   process.env.STREAM_API?.trim() ||
     process.env.VITE_STREAM_API?.trim() ||
     'https://anibiartv-api.vercel.app'
-).replace(/\/+$/, '');
+).split(',')[0].trim().replace(/\/+$/, '');
 
 type Kind = 'tv' | 'movie';
 

@@ -299,7 +299,10 @@ export interface SeasonEntry {
   episodes: number | null;
   year: number | null;
   sort: number;
+  /** "Season 2", "Movie", "Specials" ... */
   label: string;
+  /** "Part 1" / "Part 2" when a season is split into cours */
+  part: string;
 }
 
 const SEASON_QUERY = `
@@ -312,7 +315,8 @@ const SEASON_QUERY = `
     }
   }
 `;
-const SEASON_FORMATS = new Set(['TV', 'TV_SHORT', 'ONA', 'MOVIE', 'OVA']);
+const SEASON_FORMATS = new Set(['TV', 'TV_SHORT', 'ONA', 'MOVIE', 'OVA', 'SPECIAL']);
+const PART_RE = /\b(?:part|cour)\s*(\d+)\b|\b(\d+)(?:st|nd|rd|th)\s+cour\b/i;
 const seasonMem = new Map<string, Promise<SeasonEntry[]>>();
 
 export function fetchSeasons(anilistId: string): Promise<SeasonEntry[]> {
@@ -361,15 +365,38 @@ export function fetchSeasons(anilistId: string): Promise<SeasonEntry[]> {
           year: m.seasonYear ?? d.year ?? null,
           sort: (d.year ?? 9999) * 10000 + (d.month ?? 12) * 100 + (d.day ?? 31),
           label: '',
+          part: '',
         } as SeasonEntry;
       })
       .sort((a, b) => a.sort - b.sort || Number(a.id) - Number(b.id));
-    let n = 0;
+    // Name each entry: split cours ("Part 2", "2nd Cour") stay inside their season.
+    const groups: SeasonEntry[][] = [];
     for (const e of list) {
       if (e.format === 'MOVIE') e.label = 'Movie';
       else if (e.format === 'OVA') e.label = 'OVA';
-      else e.label = `Season ${++n}`;
+      else if (e.format === 'SPECIAL') e.label = 'Specials';
+      else {
+        const m = e.title.match(PART_RE);
+        const partNo = m ? Number(m[1] ?? m[2]) : 0;
+        if (partNo > 1 && groups.length) {
+          groups[groups.length - 1].push(e);
+          e.part = `Part ${partNo}`;
+        } else {
+          groups.push([e]);
+          if (partNo === 1) e.part = 'Part 1';
+        }
+      }
     }
+    groups.forEach((g, i) => {
+      g.forEach((e) => (e.label = `Season ${i + 1}`));
+      if (g.length > 1) {
+        let next = 1;
+        for (const e of g) {
+          if (!e.part) e.part = `Part ${next}`;
+          next = Number(e.part.replace(/\D/g, '')) + 1;
+        }
+      }
+    });
     return list;
   })().catch(() => {
     seasonMem.delete(anilistId);

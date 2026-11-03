@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
 import { FaClosedCaptioning, FaMicrophone, FaPlay } from 'react-icons/fa';
-import { FiEye, FiEyeOff, FiGrid, FiList, FiRepeat } from 'react-icons/fi';
+import { FiEye, FiEyeOff, FiGrid, FiList, FiRepeat, FiX } from 'react-icons/fi';
 import type { StreamEpisode } from '../../hooks/anivexa';
 
 // ---------------------------------------------------------------------------
@@ -12,23 +12,34 @@ import type { StreamEpisode } from '../../hooks/anivexa';
 const ACCENT = '#b7a9ff';
 const LINE = 'color-mix(in srgb, var(--global-text) 18%, transparent)';
 
-const Panel = styled.aside`
+const Panel = styled.aside<{ $sheet?: boolean }>`
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-height: min(36rem, 74vh);
-  border-radius: 1.4rem;
-  border: 1.5px solid ${LINE};
-  background: rgba(30, 30, 34, 0.96);
+  background: rgba(30, 30, 34, 0.98);
   overflow: hidden;
 
-  @media (min-width: 1000px) {
-    max-height: calc(100vh - 6rem);
-    border-radius: 1rem;
-  }
+  ${({ $sheet }) =>
+    $sheet
+      ? `
+    /* bottom sheet: fills the space under the player */
+    height: 100%;
+    border-radius: 1.4rem 1.4rem 0 0;
+    border: 1.5px solid ${LINE};
+    border-bottom: none;
+  `
+      : `
+    max-height: min(36rem, 74vh);
+    border-radius: 1.4rem;
+    border: 1.5px solid ${LINE};
+    @media (min-width: 1000px) {
+      max-height: calc(100vh - 6rem);
+      border-radius: 1rem;
+    }
+  `}
 `;
 
-const Handle = styled.div`
+const Handle = styled.div<{ $always?: boolean }>`
   flex: none;
   display: grid;
   place-items: center;
@@ -41,7 +52,7 @@ const Handle = styled.div`
     background: rgba(255, 255, 255, 0.28);
   }
   @media (min-width: 1000px) {
-    display: none;
+    display: ${({ $always }) => ($always ? 'grid' : 'none')};
   }
 `;
 
@@ -91,8 +102,8 @@ const Tools = styled.div`
 const ToolBtn = styled.button<{ $active?: boolean }>`
   display: grid;
   place-items: center;
-  width: 2.35rem;
-  height: 2.35rem;
+  width: 2.2rem;
+  height: 2.2rem;
   padding: 0;
   border-radius: 0.6rem;
   border: 1.5px solid ${({ $active }) => ($active ? ACCENT : LINE)};
@@ -347,6 +358,9 @@ type Props = {
   subNumbers?: Set<number>;
   dubNumbers?: Set<number>;
   onSelect: (episode: StreamEpisode) => void;
+  /** render as a bottom sheet (phones / tablets) with a close button */
+  sheet?: boolean;
+  onClose?: () => void;
 };
 
 export default function EpisodePanel({
@@ -358,6 +372,8 @@ export default function EpisodePanel({
   subNumbers,
   dubNumbers,
   onSelect,
+  sheet,
+  onClose,
 }: Props) {
   const [grid, setGrid] = useState(() => read('episode-view', 'list') === 'grid');
   const [desc, setDesc] = useState(() => read('episode-newest-first', '0') === '1');
@@ -401,8 +417,8 @@ export default function EpisodePanel({
   const position = episodes.findIndex((e) => e.number === currentNumber) + 1;
 
   return (
-    <Panel>
-      <Handle />
+    <Panel $sheet={sheet}>
+      <Handle $always={sheet} />
       <Header>
         <div className='title'>
           <h3>{title || 'Episodes'}</h3>
@@ -444,6 +460,11 @@ export default function EpisodePanel({
           >
             {grid ? <FiList /> : <FiGrid />}
           </ToolBtn>
+          {onClose && (
+            <ToolBtn title='Close' aria-label='Close episodes' onClick={onClose}>
+              <FiX />
+            </ToolBtn>
+          )}
         </Tools>
       </Header>
 

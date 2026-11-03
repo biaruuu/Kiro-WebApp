@@ -1451,7 +1451,7 @@ const Details = () => {
             {seasons.map((se) => (
               <SeasonWrap key={se.id} $current={se.id === String(anime.id)}>
                 <AnimeCard
-                  relation={se.id === String(anime.id) ? `${se.label} · Current` : se.label}
+                  relation={`${se.label}${se.part ? ` · ${se.part}` : ''}${se.id === String(anime.id) ? ' · Current' : ''}`}
                   item={{
                     id: se.id,
                     title: { english: se.title },

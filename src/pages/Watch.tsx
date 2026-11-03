@@ -366,7 +366,18 @@ const EpBar = styled.div`
   }
 `;
 
-const EpDrawer = styled.div`
+const slideUp = keyframes`
+  from { transform: translateY(100%); }
+  to { transform: none; }
+`;
+
+const Sheet = styled.div`
+  position: fixed;
+  z-index: 60;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  animation: ${slideUp} 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   @media (min-width: 1000px) {
     display: none;
   }
@@ -900,6 +911,8 @@ export default function Watch() {
 
   const [watchedTick, setWatchedTick] = useState(0);
   const [epsOpen, setEpsOpen] = useState(false);
+  const [sheetTop, setSheetTop] = useState(0);
+  const playerRef = useRef<HTMLDivElement>(null);
   const [descOpen, setDescOpen] = useState(false);
   const [relOpen, setRelOpen] = useState(true);
   const [recOpen, setRecOpen] = useState(true);
@@ -921,6 +934,31 @@ export default function Watch() {
       alive = false;
     };
   }, [animeId]);
+
+  // ----- episode sheet: pin it right under the player and lock page scroll -----
+  useEffect(() => {
+    if (!epsOpen) return;
+    window.scrollTo(0, 0);
+    const place = () => {
+      const r = playerRef.current?.getBoundingClientRect();
+      setSheetTop(Math.max(0, Math.round(r?.bottom ?? 0)));
+      if (window.innerWidth >= 1000) setEpsOpen(false); // sidebar takes over
+    };
+    place();
+    const prevBody = document.body.style.overflow;
+    const prevHtml = document.documentElement.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && setEpsOpen(false);
+    window.addEventListener('resize', place);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      document.body.style.overflow = prevBody;
+      document.documentElement.style.overflow = prevHtml;
+      window.removeEventListener('resize', place);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [epsOpen]);
 
   // ----- seasons / parts of the franchise -----
   useEffect(() => {
@@ -1176,7 +1214,7 @@ export default function Watch() {
           </Notice>
         ) : (
           <>
-            <PlayerBox>
+            <PlayerBox ref={playerRef}>
               <StreamPlayer
                 watch={watch}
                 loading={watchLoading || !currentEp}
@@ -1351,7 +1389,6 @@ export default function Watch() {
                   )}
                 </button>
               </EpBar>
-              {epsOpen && <EpDrawer style={{ marginTop: '0.6rem' }}>{episodePanel}</EpDrawer>}
             </Pad>
           </>
         )}
@@ -1416,6 +1453,7 @@ export default function Watch() {
                     >
                       {current && <span className='cur'>Current</span>}
                       <strong>{se.label}</strong>
+                      {se.part && <small>{se.part}</small>}
                       <small>{se.year ?? ''}</small>
                     </SeasonTile>
                   );
@@ -1470,6 +1508,23 @@ export default function Watch() {
       <Side>
         {providers === null ? <Skeleton $h='28rem' /> : episodePanel}
       </Side>
+
+      {epsOpen && (
+        <Sheet style={{ top: sheetTop }}>
+          <EpisodePanel
+            sheet
+            onClose={() => setEpsOpen(false)}
+            title={title}
+            subNumbers={subNumbers}
+            dubNumbers={dubNumbers}
+            episodes={episodes}
+            currentNumber={currentEp?.number}
+            watched={watched}
+            fallbackImage={anime?.cover || anime?.image}
+            onSelect={selectEpisode}
+          />
+        </Sheet>
+      )}
     </Page>
   );
 }

@@ -1086,11 +1086,9 @@ export default function Watch() {
     };
   }, [currentEp?.id]);
 
-  // If this provider has nothing playable for the episode, try the next one.
-  useEffect(() => {
-    if (!currentEp || !activeProvider || watchLoading) return;
-    const empty = !!watchError || (watch !== null && watch.streams.length === 0);
-    if (!empty) return;
+  // Move on to the next provider that has this episode (nothing playable here).
+  const failover = (why: string) => {
+    if (!currentEp || !activeProvider) return;
     triedProviders.current.add(activeProvider.provider);
     const next = providerOptions.find(
       (p) =>
@@ -1099,10 +1097,17 @@ export default function Watch() {
     );
     if (next) {
       setProviderNotice(
-        `${providerLabel(activeProvider.provider)} had no sources for episode ${currentEp.number} — switched to ${providerLabel(next.provider)}.`,
+        `${providerLabel(activeProvider.provider)} ${why} for episode ${currentEp.number} — switched to ${providerLabel(next.provider)}.`,
       );
       setProviderPref(next.provider);
     }
+  };
+
+  // If this provider has nothing playable for the episode, try the next one.
+  useEffect(() => {
+    if (!currentEp || !activeProvider || watchLoading) return;
+    const empty = !!watchError || (watch !== null && watch.streams.length === 0);
+    if (empty) failover('had no sources');
   }, [watch, watchError, watchLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ----- history + document title -----
@@ -1226,6 +1231,7 @@ export default function Watch() {
                 autoNext={autoNext}
                 autoSkip={autoSkip}
                 onEnded={goNext}
+                onExhausted={() => failover('could not play any server')}
                 onProgress={(t, d) => currentEp && saveProgress(animeId, currentEp.number, t, d)}
               />
             </PlayerBox>

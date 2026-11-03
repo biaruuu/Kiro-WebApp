@@ -152,6 +152,8 @@ type Props = {
   autoNext: boolean;
   autoSkip: boolean;
   onEnded: () => void;
+  /** every server of this source failed: let the page try another provider */
+  onExhausted?: () => void;
   onProgress: (currentTime: number, duration: number) => void;
 };
 
@@ -169,6 +171,7 @@ export default function StreamPlayer({
   autoNext,
   autoSkip,
   onEnded,
+  onExhausted,
   onProgress,
 }: Props) {
   const player = useRef<MediaPlayerInstance>(null);
@@ -269,6 +272,11 @@ export default function StreamPlayer({
   const showOutroSkip = !autoSkip && isSkippable(time, outro);
 
   const allFailed = servers.length > 0 && failed.size >= servers.length;
+
+  useEffect(() => {
+    if (allFailed) onExhausted?.();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allFailed]);
 
   let content;
   if (loading) {
@@ -372,10 +380,10 @@ export default function StreamPlayer({
         )}
       </Stage>
 
-      {servers.length > 1 && (
+      {servers.length > 0 && (
         <ServerBar>
           <FaServer />
-          Servers:
+          Server
           {servers.map((s, i) => (
             <ServerChip
               key={`${s.server}-${s.type}-${i}`}

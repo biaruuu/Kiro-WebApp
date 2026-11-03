@@ -167,11 +167,11 @@ const EpHead = styled.div`
     align-items: center;
     gap: 0.25rem 0.5rem;
     color: var(--global-text-muted);
-    font-size: 0.78rem;
+    font-size: 0.72rem;
   }
   h1 {
     margin: 0.4rem 0 0;
-    font-size: 1.2rem;
+    font-size: 1.08rem;
     font-weight: 700;
     line-height: 1.3;
     letter-spacing: -0.005em;
@@ -206,14 +206,14 @@ const PopBtn = styled.button<{ $icon?: boolean }>`
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  height: 2.5rem;
+  height: 2.4rem;
   padding: ${({ $icon }) => ($icon ? '0' : '0 0.8rem')};
-  min-width: ${({ $icon }) => ($icon ? '2.5rem' : '0')};
+  min-width: ${({ $icon }) => ($icon ? '2.4rem' : '0')};
   border-radius: 0.7rem;
   border: 1.5px solid color-mix(in srgb, var(--global-text) 22%, transparent);
   background: rgba(16, 16, 20, 0.55);
   color: var(--global-text);
-  font-size: 0.88rem;
+  font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
   white-space: nowrap;
@@ -335,11 +335,11 @@ const EpBar = styled.div`
     align-items: center;
     justify-content: center;
     gap: 0.45rem;
-    height: 2.7rem;
+    height: 2.5rem;
     border: none;
     background: transparent;
     color: var(--global-text);
-    font-size: 0.88rem;
+    font-size: 0.8rem;
     font-weight: 500;
     cursor: pointer;
     transition: background-color 0.2s ease;
@@ -398,7 +398,7 @@ const AnimeHead = styled.div`
 
   .poster {
     flex: none;
-    width: 3.4rem;
+    width: 3.1rem;
     aspect-ratio: 2 / 3;
     border-radius: 0.6rem;
     overflow: hidden;
@@ -421,7 +421,7 @@ const AnimeHead = styled.div`
   }
   h2 {
     margin: 0;
-    font-size: 1.05rem;
+    font-size: 0.95rem;
     font-weight: 600;
     line-height: 1.3;
     display: -webkit-box;
@@ -436,7 +436,7 @@ const AnimeHead = styled.div`
     gap: 0.2rem 0.45rem;
     margin-top: 0.4rem;
     color: var(--global-text-muted);
-    font-size: 0.8rem;
+    font-size: 0.74rem;
   }
   .sub span {
     display: inline-flex;
@@ -461,8 +461,8 @@ const Synopsis = styled.div<{ $open: boolean }>`
   p {
     margin: 0;
     color: rgba(255, 255, 255, 0.68);
-    font-size: 0.86rem;
-    line-height: 1.7;
+    font-size: 0.8rem;
+    line-height: 1.6;
     white-space: pre-line;
     ${({ $open }) =>
       $open ? '' : 'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;'}

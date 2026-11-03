@@ -61,7 +61,7 @@ const Header = styled.div`
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  padding: 0.4rem 0.9rem 0.8rem;
+  padding: 0.2rem 0.8rem 0.7rem;
   border-bottom: 1.5px solid ${LINE};
 
   .title {
@@ -77,7 +77,7 @@ const Header = styled.div`
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.95rem;
+    font-size: 0.86rem;
     font-weight: 700;
     letter-spacing: 0.01em;
     text-transform: uppercase;
@@ -85,7 +85,7 @@ const Header = styled.div`
   .pos {
     flex: none;
     color: var(--global-text-muted);
-    font-size: 0.85rem;
+    font-size: 0.78rem;
     font-weight: 500;
   }
   @media (min-width: 1000px) {
@@ -102,14 +102,14 @@ const Tools = styled.div`
 const ToolBtn = styled.button<{ $active?: boolean }>`
   display: grid;
   place-items: center;
-  width: 2.2rem;
-  height: 2.2rem;
+  width: 2.05rem;
+  height: 2.05rem;
   padding: 0;
   border-radius: 0.6rem;
   border: 1.5px solid ${({ $active }) => ($active ? ACCENT : LINE)};
   background: transparent;
   color: ${({ $active }) => ($active ? ACCENT : 'var(--global-text)')};
-  font-size: 1.05rem;
+  font-size: 0.92rem;
   cursor: pointer;
   transition:
     border-color 0.2s ease,
@@ -152,7 +152,7 @@ const Scroll = styled.div`
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 0.6rem 0.55rem 0.7rem;
+  padding: 0.5rem 0.5rem 0.8rem;
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
   overscroll-behavior: contain;
@@ -162,8 +162,8 @@ const Row = styled.button<{ $active: boolean; $watched: boolean }>`
   display: flex;
   align-items: stretch;
   width: 100%;
-  min-height: 5rem;
-  margin: 0 0 0.45rem;
+  min-height: 4.9rem;
+  margin: 0 0 0.4rem;
   padding: 0;
   text-align: left;
   border-radius: 1rem;
@@ -181,7 +181,7 @@ const Row = styled.button<{ $active: boolean; $watched: boolean }>`
   .thumb {
     position: relative;
     flex: none;
-    width: 7.4rem;
+    width: 7.2rem;
     background: var(--global-tertiary-bg);
     overflow: hidden;
   }
@@ -205,7 +205,7 @@ const Row = styled.button<{ $active: boolean; $watched: boolean }>`
     place-items: center;
     padding: 0 0.5rem 1rem;
     text-align: center;
-    font-size: 0.66rem;
+    font-size: 0.58rem;
     font-weight: 800;
     letter-spacing: 0.16em;
     line-height: 1.5;
@@ -219,10 +219,10 @@ const Row = styled.button<{ $active: boolean; $watched: boolean }>`
     display: inline-flex;
     align-items: center;
     gap: 0.3rem;
-    padding: 0.32rem 0.62rem;
+    padding: 0.28rem 0.55rem;
     border-radius: 999px;
     background: rgba(8, 8, 10, 0.72);
-    font-size: 0.78rem;
+    font-size: 0.68rem;
     font-weight: 700;
     color: #fff;
   }
@@ -233,38 +233,38 @@ const Row = styled.button<{ $active: boolean; $watched: boolean }>`
     display: flex;
     flex-direction: column;
     justify-content: space-between;
-    gap: 0.35rem;
-    padding: 0.55rem 0.8rem 0.5rem 0.75rem;
+    gap: 0.25rem;
+    padding: 0.45rem 0.7rem 0.4rem 0.65rem;
   }
   .name {
     margin: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.95rem;
+    font-size: 0.84rem;
     font-weight: 500;
-    line-height: 1.3;
+    line-height: 1.25;
     color: ${({ $active }) => ($active ? ACCENT : 'var(--global-text)')};
   }
   .desc {
-    margin: 0.25rem 0 0;
+    margin: 0.15rem 0 0;
     display: -webkit-box;
     -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
     color: var(--global-text-muted);
-    font-size: 0.76rem;
-    line-height: 1.45;
+    font-size: 0.68rem;
+    line-height: 1.2;
   }
   .foot {
     display: flex;
     align-items: center;
-    gap: 0.6rem;
+    gap: 0.5rem;
     color: var(--global-text-muted);
-    font-size: 0.76rem;
+    font-size: 0.68rem;
   }
   .foot svg {
-    font-size: 0.82rem;
+    font-size: 0.74rem;
   }
   .foot .off {
     opacity: 0.28;
@@ -276,7 +276,7 @@ const Row = styled.button<{ $active: boolean; $watched: boolean }>`
 
   @media (min-width: 700px) {
     .thumb {
-      width: 8.6rem;
+      width: 8.2rem;
     }
   }
 `;
@@ -298,7 +298,7 @@ const Grid = styled.div`
 const Pill = styled.button<{ $active: boolean; $watched: boolean; $filler: boolean }>`
   display: grid;
   place-items: center;
-  height: 2.2rem;
+  height: 2rem;
   padding: 0;
   border-radius: 999px;
   border: 1.5px solid

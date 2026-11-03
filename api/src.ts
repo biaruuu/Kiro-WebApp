@@ -132,6 +132,23 @@ async function episodes(id: string) {
   const ok = settled.flatMap((r) => (r.status === 'fulfilled' ? [r.value] : []));
   if (!ok.length) throw Object.assign(new Error('upstream'), { status: 502 });
 
+  // The all-providers call can come back with only the sources that were ready.
+  // Ask each upstream directly for the providers it left out, so more of them
+  // show up (slow / failing ones are simply skipped).
+  const usable = (v: any) =>
+    v && !v.error && (v.episodes?.sub?.length || v.episodes?.dub?.length);
+  const extras = await Promise.allSettled(
+    ok.flatMap(({ base, d }) =>
+      PROVIDERS.filter(([real]) => !usable(d?.[real])).map(([real]) =>
+        upstream(base, `episodes/${real}/${id}`, 9000).then((r) => ({
+          base,
+          d: r?.[real] ? { [real]: r[real] } : {},
+        })),
+      ),
+    ),
+  );
+  for (const r of extras) if (r.status === 'fulfilled') ok.push(r.value);
+
   // same provider on several upstreams: keep the one with the most episodes
   const best = new Map<string, { base: string; value: any; size: number }>();
   for (const { base, d } of ok) {

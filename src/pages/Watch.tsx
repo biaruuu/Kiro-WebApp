@@ -1116,6 +1116,13 @@ export default function Watch() {
   const nextEp =
     currentIndex >= 0 && currentIndex < episodes.length - 1 ? episodes[currentIndex + 1] : undefined;
 
+  const subNumbers = new Set<number>();
+  const dubNumbers = new Set<number>();
+  for (const p of providers ?? []) {
+    p.sub.forEach((e) => subNumbers.add(e.number));
+    p.dub.forEach((e) => dubNumbers.add(e.number));
+  }
+
   const subTotal = Math.max(0, ...(providers ?? []).map((p) => p.sub.length));
   const dubTotal = Math.max(0, ...(providers ?? []).map((p) => p.dub.length));
 
@@ -1136,6 +1143,9 @@ export default function Watch() {
 
   const episodePanel = (
     <EpisodePanel
+      title={title}
+      subNumbers={subNumbers}
+      dubNumbers={dubNumbers}
       episodes={episodes}
       currentNumber={currentEp?.number}
       watched={watched}

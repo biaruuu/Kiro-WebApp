@@ -1,60 +1,122 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import styled from 'styled-components';
-import { FaListUl, FaThLarge, FaPlay } from 'react-icons/fa';
+import { FaClosedCaptioning, FaMicrophone, FaPlay } from 'react-icons/fa';
+import { FiEye, FiEyeOff, FiGrid, FiList, FiRepeat } from 'react-icons/fi';
 import type { StreamEpisode } from '../../hooks/anivexa';
+
+// ---------------------------------------------------------------------------
+// Miruro-style episode sheet: handle, title + position, sort / spoiler / layout
+// buttons, then either rich rows (thumbnail, title, synopsis, audio, date) or a
+// compact grid of number pills.
+// ---------------------------------------------------------------------------
+const ACCENT = '#b7a9ff';
+const LINE = 'color-mix(in srgb, var(--global-text) 18%, transparent)';
 
 const Panel = styled.aside`
   display: flex;
   flex-direction: column;
-  background: var(--global-secondary-bg);
-  border: 1px solid var(--global-border);
-  border-radius: 1rem;
-  overflow: hidden;
   min-height: 0;
+  max-height: min(36rem, 74vh);
+  border-radius: 1.4rem;
+  border: 1.5px solid ${LINE};
+  background: rgba(30, 30, 34, 0.96);
+  overflow: hidden;
+
+  @media (min-width: 1000px) {
+    max-height: calc(100vh - 6rem);
+    border-radius: 1rem;
+  }
+`;
+
+const Handle = styled.div`
+  flex: none;
+  display: grid;
+  place-items: center;
+  height: 1.9rem;
+  &::before {
+    content: '';
+    width: 2.6rem;
+    height: 0.28rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.28);
+  }
+  @media (min-width: 1000px) {
+    display: none;
+  }
 `;
 
 const Header = styled.div`
+  flex: none;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-  padding: 0.85rem 1rem;
-  border-bottom: 1px solid var(--global-border);
+  gap: 0.6rem;
+  padding: 0.4rem 0.9rem 0.8rem;
+  border-bottom: 1.5px solid ${LINE};
 
+  .title {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    align-items: baseline;
+    gap: 0.6rem;
+  }
   h3 {
     margin: 0;
-    font-size: 1rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.95rem;
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    text-transform: uppercase;
   }
-  small {
+  .pos {
+    flex: none;
     color: var(--global-text-muted);
+    font-size: 0.85rem;
     font-weight: 500;
-    margin-left: 0.4rem;
+  }
+  @media (min-width: 1000px) {
+    padding-top: 0.8rem;
   }
 `;
 
 const Tools = styled.div`
+  flex: none;
   display: flex;
   gap: 0.4rem;
-  align-items: center;
 `;
 
-const IconBtn = styled.button<{ $active?: boolean }>`
+const ToolBtn = styled.button<{ $active?: boolean }>`
   display: grid;
   place-items: center;
-  width: 2rem;
-  height: 2rem;
-  border: none;
-  border-radius: var(--global-border-radius);
+  width: 2.35rem;
+  height: 2.35rem;
+  padding: 0;
+  border-radius: 0.6rem;
+  border: 1.5px solid ${({ $active }) => ($active ? ACCENT : LINE)};
+  background: transparent;
+  color: ${({ $active }) => ($active ? ACCENT : 'var(--global-text)')};
+  font-size: 1.05rem;
   cursor: pointer;
-  color: ${({ $active }) => ($active ? '#fff' : 'var(--global-text)')};
-  background: ${({ $active }) =>
-    $active ? 'var(--primary-accent)' : 'var(--global-button-bg)'};
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
+  &:hover {
+    background: rgba(255, 255, 255, 0.07);
+  }
+  svg {
+    flex: none;
+  }
 `;
 
 const Ranges = styled.div`
+  flex: none;
   display: flex;
   gap: 0.4rem;
-  padding: 0.6rem 1rem 0;
+  padding: 0.6rem 0.9rem 0;
   overflow-x: auto;
   scrollbar-width: none;
   &::-webkit-scrollbar {
@@ -64,134 +126,181 @@ const Ranges = styled.div`
 
 const RangeBtn = styled.button<{ $active: boolean }>`
   flex: none;
-  padding: 0.3rem 0.7rem;
+  padding: 0.3rem 0.75rem;
   border-radius: 999px;
-  border: 1px solid var(--global-border);
+  border: 1.5px solid ${({ $active }) => ($active ? ACCENT : LINE)};
+  background: ${({ $active }) => ($active ? 'rgba(183,169,255,0.16)' : 'transparent')};
+  color: ${({ $active }) => ($active ? ACCENT : 'var(--global-text)')};
   font-size: 0.75rem;
   font-weight: 600;
   cursor: pointer;
-  color: ${({ $active }) => ($active ? '#fff' : 'var(--global-text)')};
-  background: ${({ $active }) =>
-    $active ? 'var(--primary-accent)' : 'transparent'};
 `;
 
 const Scroll = styled.div`
-  overflow-y: auto;
-  padding: 0.6rem;
+  position: relative;
   flex: 1;
   min-height: 0;
-  max-height: 38rem;
-
-  @media (max-width: 1100px) {
-    max-height: 24rem;
-  }
+  overflow-y: auto;
+  padding: 0.6rem 0.55rem 0.7rem;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.28) transparent;
+  overscroll-behavior: contain;
 `;
 
 const Row = styled.button<{ $active: boolean; $watched: boolean }>`
   display: flex;
-  align-items: center;
-  gap: 0.75rem;
+  align-items: stretch;
   width: 100%;
-  padding: 0.5rem;
-  margin-bottom: 0.35rem;
+  min-height: 5rem;
+  margin: 0 0 0.45rem;
+  padding: 0;
   text-align: left;
-  border: 1px solid
-    ${({ $active }) => ($active ? 'var(--primary-accent)' : 'transparent')};
-  border-radius: var(--global-border-radius);
-  cursor: pointer;
+  border-radius: 1rem;
+  border: 1.5px solid ${({ $active }) => ($active ? ACCENT : LINE)};
+  background: ${({ $active }) => ($active ? 'rgba(183,169,255,0.26)' : 'rgba(255,255,255,0.045)')};
   color: var(--global-text);
-  background: ${({ $active }) =>
-    $active ? 'var(--primary-accent-bg)' : 'transparent'};
-  opacity: ${({ $watched, $active }) => ($watched && !$active ? 0.6 : 1)};
-  transition: background-color 0.15s ease;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background-color 0.2s ease;
 
   &:hover {
-    background: var(--global-tertiary-bg);
+    background: ${({ $active }) => ($active ? 'rgba(183,169,255,0.32)' : 'rgba(255,255,255,0.08)')};
   }
 
   .thumb {
     position: relative;
     flex: none;
-    width: 6.5rem;
-    aspect-ratio: 16 / 9;
-    border-radius: 0.35rem;
-    overflow: hidden;
+    width: 7.4rem;
     background: var(--global-tertiary-bg);
+    overflow: hidden;
   }
   .thumb img {
+    position: absolute;
+    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: cover;
     display: block;
+    opacity: ${({ $watched, $active }) => ($watched && !$active ? 0.6 : 1)};
   }
-  .thumb .num {
-    position: absolute;
-    left: 0.25rem;
-    bottom: 0.25rem;
-    padding: 0.05rem 0.35rem;
-    font-size: 0.7rem;
-    font-weight: 700;
-    border-radius: 0.25rem;
-    background: rgba(0, 0, 0, 0.7);
-    color: #fff;
+  .thumb img.blur {
+    filter: blur(14px) brightness(0.55) saturate(1.2);
+    transform: scale(1.25);
   }
-  .thumb .playing {
+  .thumb .hidden {
     position: absolute;
     inset: 0;
     display: grid;
     place-items: center;
-    background: rgba(0, 0, 0, 0.45);
+    padding: 0 0.5rem 1rem;
+    text-align: center;
+    font-size: 0.66rem;
+    font-weight: 800;
+    letter-spacing: 0.16em;
+    line-height: 1.5;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.85);
+  }
+  .thumb .num {
+    position: absolute;
+    left: 0.4rem;
+    bottom: 0.4rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.32rem 0.62rem;
+    border-radius: 999px;
+    background: rgba(8, 8, 10, 0.72);
+    font-size: 0.78rem;
+    font-weight: 700;
     color: #fff;
   }
-  .meta {
+
+  .info {
+    flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 0.35rem;
+    padding: 0.55rem 0.8rem 0.5rem 0.75rem;
   }
-  .meta strong {
+  .name {
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.95rem;
+    font-weight: 500;
+    line-height: 1.3;
+    color: ${({ $active }) => ($active ? ACCENT : 'var(--global-text)')};
+  }
+  .desc {
+    margin: 0.25rem 0 0;
     display: -webkit-box;
-    -webkit-line-clamp: 2;
+    -webkit-line-clamp: 3;
     -webkit-box-orient: vertical;
     overflow: hidden;
-    font-size: 0.85rem;
-  }
-  .meta span {
-    font-size: 0.72rem;
     color: var(--global-text-muted);
+    font-size: 0.76rem;
+    line-height: 1.45;
+  }
+  .foot {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--global-text-muted);
+    font-size: 0.76rem;
+  }
+  .foot svg {
+    font-size: 0.82rem;
+  }
+  .foot .off {
+    opacity: 0.28;
+  }
+  .foot .date {
+    margin-left: auto;
+    white-space: nowrap;
   }
 
-  @media (max-width: 500px) {
+  @media (min-width: 700px) {
     .thumb {
-      width: 5.25rem;
+      width: 8.6rem;
     }
   }
 `;
 
 const Grid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(3.1rem, 1fr));
-  gap: 0.4rem;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+  padding: 0.1rem 0.1rem 0;
+
+  @media (min-width: 700px) {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+  @media (min-width: 1000px) {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
 `;
 
-const Cell = styled.button<{ $active: boolean; $watched: boolean; $filler: boolean }>`
-  height: 2.6rem;
-  border-radius: var(--global-border-radius);
-  border: 1px solid
-    ${({ $active, $filler }) =>
-      $active ? 'var(--primary-accent)' : $filler ? '#c9a227' : 'var(--global-border)'};
-  background: ${({ $active, $watched }) =>
-    $active
-      ? 'var(--primary-accent)'
-      : $watched
-        ? 'var(--global-tertiary-bg)'
-        : 'var(--global-button-bg)'};
-  color: ${({ $active }) => ($active ? '#fff' : 'var(--global-text)')};
-  opacity: ${({ $watched, $active }) => ($watched && !$active ? 0.6 : 1)};
-  font-weight: 700;
+const Pill = styled.button<{ $active: boolean; $watched: boolean; $filler: boolean }>`
+  display: grid;
+  place-items: center;
+  height: 2.2rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1.5px solid
+    ${({ $active, $filler }) => ($active ? 'transparent' : $filler ? '#c9a227' : LINE)};
+  background: ${({ $active }) => ($active ? ACCENT : 'transparent')};
+  color: ${({ $active }) => ($active ? '#0b0b10' : 'var(--global-text)')};
+  opacity: ${({ $watched, $active }) => ($watched && !$active ? 0.55 : 1)};
   font-size: 0.85rem;
+  font-weight: 500;
   cursor: pointer;
-
+  transition: background-color 0.2s ease;
   &:hover {
-    background: var(--primary-accent);
-    color: #fff;
+    background: ${({ $active }) => ($active ? ACCENT : 'rgba(255,255,255,0.09)')};
   }
 `;
 
@@ -211,39 +320,59 @@ const fmtDate = (iso?: string | null) => {
     : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-const RANGE_SIZE = 50;
+const RANGE_SIZE = 100;
+
+const read = (key: string, fallback: string) => {
+  try {
+    return localStorage.getItem(key) ?? fallback;
+  } catch {
+    return fallback;
+  }
+};
+const write = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* ignore */
+  }
+};
 
 type Props = {
+  title?: string;
   episodes: StreamEpisode[];
   currentNumber?: number;
   watched: Set<number>;
   fallbackImage?: string;
+  /** episode numbers that exist with subtitles / with a dub (any source) */
+  subNumbers?: Set<number>;
+  dubNumbers?: Set<number>;
   onSelect: (episode: StreamEpisode) => void;
 };
 
 export default function EpisodePanel({
+  title,
   episodes,
   currentNumber,
   watched,
   fallbackImage,
+  subNumbers,
+  dubNumbers,
   onSelect,
 }: Props) {
-  const [view, setView] = useState<'list' | 'grid'>(() => {
-    try {
-      const saved = localStorage.getItem('episode-view');
-      if (saved === 'list' || saved === 'grid') return saved;
-    } catch {
-      /* ignore */
-    }
-    return episodes.length > 60 ? 'grid' : 'list';
-  });
+  const [grid, setGrid] = useState(() => read('episode-view', 'list') === 'grid');
+  const [desc, setDesc] = useState(() => read('episode-newest-first', '0') === '1');
+  const [hidden, setHidden] = useState(() => read('episode-hide-spoilers', '0') === '1');
   const [range, setRange] = useState(0);
+
+  const scrollRef = useRef<HTMLDivElement>(null);
   const activeRef = useRef<HTMLButtonElement | null>(null);
+
+  const ordered = useMemo(() => (desc ? [...episodes].reverse() : episodes), [episodes, desc]);
 
   const ranges = useMemo(() => {
     const out: { label: string; from: number; to: number }[] = [];
-    for (let i = 0; i < episodes.length; i += RANGE_SIZE) {
-      const slice = episodes.slice(i, i + RANGE_SIZE);
+    for (let i = 0; i < ordered.length; i += RANGE_SIZE) {
+      const slice = ordered.slice(i, i + RANGE_SIZE);
       out.push({
         label: `${slice[0].number}-${slice[slice.length - 1].number}`,
         from: i,
@@ -251,54 +380,70 @@ export default function EpisodePanel({
       });
     }
     return out;
-  }, [episodes]);
+  }, [ordered]);
 
   // Jump to the range holding the current episode.
   useEffect(() => {
-    const idx = episodes.findIndex((e) => e.number === currentNumber);
+    const idx = ordered.findIndex((e) => e.number === currentNumber);
     if (idx >= 0) setRange(Math.floor(idx / RANGE_SIZE));
-  }, [currentNumber, episodes]);
+  }, [currentNumber, ordered]);
 
+  // Keep the playing episode in view inside the panel (never scrolls the page).
   useEffect(() => {
-    activeRef.current?.scrollIntoView({ block: 'nearest' });
-  }, [currentNumber, range, view]);
+    const box = scrollRef.current;
+    const el = activeRef.current;
+    if (!box || !el) return;
+    box.scrollTop = Math.max(0, el.offsetTop - box.clientHeight / 2 + el.clientHeight / 2);
+  }, [currentNumber, range, grid, desc]);
 
-  const changeView = (v: 'list' | 'grid') => {
-    setView(v);
-    try {
-      localStorage.setItem('episode-view', v);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const visible = ranges.length
-    ? episodes.slice(ranges[Math.min(range, ranges.length - 1)].from, ranges[Math.min(range, ranges.length - 1)].to)
-    : [];
+  const current = ranges[Math.min(range, Math.max(0, ranges.length - 1))];
+  const visible = current ? ordered.slice(current.from, current.to) : [];
+  const position = episodes.findIndex((e) => e.number === currentNumber) + 1;
 
   return (
     <Panel>
+      <Handle />
       <Header>
-        <h3>
-          Episodes<small>{episodes.length}</small>
-        </h3>
+        <div className='title'>
+          <h3>{title || 'Episodes'}</h3>
+          <span className='pos'>
+            {position || '–'} / {episodes.length}
+          </span>
+        </div>
         <Tools>
-          <IconBtn
-            $active={view === 'list'}
-            onClick={() => changeView('list')}
-            title='List view'
-            aria-label='List view'
+          <ToolBtn
+            $active={desc}
+            title={desc ? 'Newest first' : 'Oldest first'}
+            aria-label='Reverse order'
+            aria-pressed={desc}
+            onClick={() => {
+              setDesc(!desc);
+              write('episode-newest-first', desc ? '0' : '1');
+            }}
           >
-            <FaListUl />
-          </IconBtn>
-          <IconBtn
-            $active={view === 'grid'}
-            onClick={() => changeView('grid')}
-            title='Grid view'
-            aria-label='Grid view'
+            <FiRepeat style={{ transform: 'rotate(90deg)' }} />
+          </ToolBtn>
+          <ToolBtn
+            title={hidden ? 'Show spoilers' : 'Hide spoilers'}
+            aria-label='Toggle spoilers'
+            aria-pressed={hidden}
+            onClick={() => {
+              setHidden(!hidden);
+              write('episode-hide-spoilers', hidden ? '0' : '1');
+            }}
           >
-            <FaThLarge />
-          </IconBtn>
+            {hidden ? <FiEyeOff /> : <FiEye />}
+          </ToolBtn>
+          <ToolBtn
+            title={grid ? 'List view' : 'Grid view'}
+            aria-label='Toggle layout'
+            onClick={() => {
+              setGrid(!grid);
+              write('episode-view', grid ? 'list' : 'grid');
+            }}
+          >
+            {grid ? <FiList /> : <FiGrid />}
+          </ToolBtn>
         </Tools>
       </Header>
 
@@ -312,42 +457,52 @@ export default function EpisodePanel({
         </Ranges>
       )}
 
-      <Scroll>
+      <Scroll ref={scrollRef}>
         {visible.length === 0 ? (
           <Empty>No episodes available for this selection.</Empty>
-        ) : view === 'grid' ? (
+        ) : grid ? (
           <Grid>
-            {visible.map((ep) => (
-              <Cell
-                key={ep.id}
-                ref={ep.number === currentNumber ? activeRef : undefined}
-                $active={ep.number === currentNumber}
-                $watched={watched.has(ep.number)}
-                $filler={ep.filler}
-                title={ep.title || `Episode ${ep.number}`}
-                onClick={() => onSelect(ep)}
-              >
-                {ep.number}
-              </Cell>
-            ))}
+            {visible.map((ep) => {
+              const on = ep.number === currentNumber;
+              return (
+                <Pill
+                  key={ep.id}
+                  ref={on ? activeRef : undefined}
+                  $active={on}
+                  $watched={watched.has(ep.number)}
+                  $filler={ep.filler}
+                  title={ep.title || `Episode ${ep.number}`}
+                  onClick={() => onSelect(ep)}
+                >
+                  {on ? <FaPlay style={{ fontSize: '0.8rem' }} /> : ep.number}
+                </Pill>
+              );
+            })}
           </Grid>
         ) : (
           visible.map((ep) => {
-            const active = ep.number === currentNumber;
+            const on = ep.number === currentNumber;
+            const img = ep.image || fallbackImage;
+            const hasSub = subNumbers ? subNumbers.has(ep.number) : true;
+            const hasDub = dubNumbers ? dubNumbers.has(ep.number) : false;
+            const generic = !ep.title || /^episode\s*\d+$/i.test(ep.title.trim());
+            const text = ep.description?.trim();
             return (
               <Row
                 key={ep.id}
-                ref={active ? activeRef : undefined}
-                $active={active}
+                ref={on ? activeRef : undefined}
+                $active={on}
                 $watched={watched.has(ep.number)}
                 onClick={() => onSelect(ep)}
               >
                 <div className='thumb'>
-                  {(ep.image || fallbackImage) && (
+                  {img && (
                     <img
-                      src={ep.image || fallbackImage}
+                      className={hidden ? 'blur' : undefined}
+                      src={img}
                       alt=''
                       loading='lazy'
+                      decoding='async'
                       onError={(e) => {
                         if (fallbackImage && e.currentTarget.src !== fallbackImage) {
                           e.currentTarget.src = fallbackImage;
@@ -355,24 +510,19 @@ export default function EpisodePanel({
                       }}
                     />
                   )}
+                  {hidden && <span className='hidden'>Hidden spoiler</span>}
                   <span className='num'>EP {ep.number}</span>
-                  {active && (
-                    <span className='playing'>
-                      <FaPlay />
-                    </span>
-                  )}
                 </div>
-                <div className='meta'>
-                  <strong>{ep.title || `Episode ${ep.number}`}</strong>
-                  <span>
-                    {[
-                      fmtDate(ep.airDate),
-                      ep.duration ? `${ep.duration > 300 ? Math.round(ep.duration / 60) : Math.round(ep.duration)}m` : null,
-                      ep.filler ? 'Filler' : null,
-                    ]
-                      .filter(Boolean)
-                      .join(' · ')}
-                  </span>
+                <div className='info'>
+                  <div>
+                    <p className='name'>{generic ? `Episode ${ep.number}` : ep.title}</p>
+                    {text && <p className='desc'>{hidden ? 'Hidden description' : text}</p>}
+                  </div>
+                  <div className='foot'>
+                    <FaClosedCaptioning className={hasSub ? undefined : 'off'} />
+                    <FaMicrophone className={hasDub ? undefined : 'off'} />
+                    <span className='date'>{fmtDate(ep.airDate)}</span>
+                  </div>
                 </div>
               </Row>
             );

@@ -571,12 +571,13 @@ const Skips = styled.div`
   }
 `;
 
-const CaptionBox = styled.div`
+const CaptionBox = styled.div<{ $lift: boolean }>`
   position: absolute;
   z-index: 5;
   left: 0;
   right: 0;
-  bottom: clamp(2.1rem, 6.5cqw, 5rem);
+  bottom: ${(p) => (p.$lift ? 'clamp(5.6rem, 15cqw, 9.5rem)' : 'clamp(0.8rem, 3.2cqw, 2.6rem)')};
+  transition: bottom 0.25s ease;
   display: flex;
   justify-content: center;
   padding: 0 5cqw;
@@ -585,22 +586,22 @@ const CaptionBox = styled.div`
     margin: 0;
     max-width: min(100%, 52em);
     text-align: center;
-    line-height: 1.3;
-    font-weight: 700;
-    letter-spacing: 0.005em;
+    line-height: 1.18;
+    font-weight: 400;
+    letter-spacing: 0;
     text-wrap: balance;
     white-space: pre-line;
     color: #fff;
   }
   .outline {
-    -webkit-text-stroke: 0.2em rgba(0, 0, 0, 0.95);
+    /* thin dark outline + soft shadow, regular weight Trebuchet (like the reference) */
+    -webkit-text-stroke: 0.13em rgba(20, 20, 20, 0.92);
     paint-order: stroke fill;
     stroke-linejoin: round;
     text-shadow:
-      0 0 0.1em #000,
-      0 0 0.1em #000,
-      0.03em 0.06em 0.16em rgba(0, 0, 0, 0.95),
-      0 0.1em 0.38em rgba(0, 0, 0, 0.65);
+      0 0 0.08em rgba(0, 0, 0, 0.9),
+      0.02em 0.05em 0.1em rgba(0, 0, 0, 0.85),
+      0 0.08em 0.3em rgba(0, 0, 0, 0.5);
   }
   .box {
     padding: 0.12em 0.6em;
@@ -1642,7 +1643,7 @@ export default function GlassPlayer({
       )}
 
       {cueText && (
-        <CaptionBox>
+        <CaptionBox $lift={!controlsHidden}>
           <p style={captionStyleVars}>
             <span className={captionStyle === 'box' ? 'box' : 'outline'}>{cueText}</span>
           </p>

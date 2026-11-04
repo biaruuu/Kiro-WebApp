@@ -214,10 +214,11 @@ const TopBar = styled(Layer)`
 `;
 
 const Pill = styled.div`
+  ${glass}
   display: flex;
   align-items: center;
-  color: #fff;
-  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+  padding: clamp(0.125rem, 0.32cqw, 0.25rem);
+  border-radius: 999px;
 `;
 
 const Btn = styled.button<{ $on?: boolean }>`
@@ -237,6 +238,7 @@ const Btn = styled.button<{ $on?: boolean }>`
     background 0.15s,
     transform 0.15s;
   svg {
+    position: relative;
     width: ${BAR_ICON};
     height: ${BAR_ICON};
   }
@@ -567,12 +569,12 @@ const Skips = styled.div`
   }
 `;
 
-const CaptionBox = styled.div<{ $lift: boolean }>`
+const CaptionBox = styled.div`
   position: absolute;
   z-index: 15;
   left: 0;
   right: 0;
-  bottom: ${(p) => (p.$lift ? 'clamp(4.2rem, 12cqw, 8rem)' : 'clamp(0.8rem, 3.2cqw, 2.6rem)')};
+  bottom: clamp(0.6rem, 2.6cqw, 2.4rem);
   transition: bottom 0.25s ease;
   display: flex;
   justify-content: center;
@@ -1641,7 +1643,7 @@ export default function GlassPlayer({
       )}
 
       {cueText && (
-        <CaptionBox $lift={!controlsHidden}>
+        <CaptionBox>
           <p style={captionStyleVars}>
             <span className={captionStyle === 'box' ? 'box' : 'outline'}>{cueText}</span>
           </p>

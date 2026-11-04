@@ -1230,6 +1230,12 @@ export default function Watch() {
                 autoPlay={autoPlay}
                 autoNext={autoNext}
                 autoSkip={autoSkip}
+                onFlag={(key, value) => {
+                  writeFlag(key, value);
+                  if (key === 'autoPlay') setAutoPlay(value);
+                  else if (key === 'autoNext') setAutoNext(value);
+                  else setAutoSkip(value);
+                }}
                 onEnded={goNext}
                 onExhausted={() => failover('could not play any server')}
                 onProgress={(t, d) => currentEp && saveProgress(animeId, currentEp.number, t, d)}

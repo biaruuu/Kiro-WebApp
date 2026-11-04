@@ -78,6 +78,8 @@ type Props = {
   /** every server of this source failed: let the page try another provider */
   onExhausted?: () => void;
   onProgress: (currentTime: number, duration: number) => void;
+  /** the player's own settings menu toggles these */
+  onFlag?: (key: 'autoPlay' | 'autoNext' | 'autoSkip', value: boolean) => void;
 };
 
 export default function StreamPlayer({
@@ -93,6 +95,7 @@ export default function StreamPlayer({
   onEnded,
   onExhausted,
   onProgress,
+  onFlag,
 }: Props) {
   const stallTimer = useRef<number | undefined>(undefined);
 
@@ -227,17 +230,19 @@ export default function StreamPlayer({
         tracks={tracks}
         startTime={startTime}
         autoPlay={autoPlay}
-        autoSkip={autoSkip}
-        autoNext={autoNext}
         intro={intro}
         outro={outro}
+        autoplayOption={onFlag ? { value: autoPlay, onChange: (v) => onFlag('autoPlay', v) } : undefined}
+        autoNextOption={onFlag ? { value: autoNext, onChange: (v) => onFlag('autoNext', v) } : undefined}
+        autoSkipOption={onFlag ? { value: autoSkip, onChange: (v) => onFlag('autoSkip', v) } : undefined}
         sourceQualities={qualities}
         sourceQuality={quality}
         onSourceQuality={chooseQuality}
         onReady={clearStall}
-        onError={() => tryNext(index)}
-        onEnded={onEnded}
-        onNext={onEnded}
+        onFail={() => tryNext(index)}
+        onEnded={() => {
+          if (autoNext) onEnded();
+        }}
         onProgress={onProgress}
       />
     );

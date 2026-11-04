@@ -1,27 +1,42 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+/**
+ * The AniBiar video player (https://github.com/biaruuu/anibiartv), ported from
+ * React + Tailwind to styled-components and restyled as Apple "Liquid Glass".
+ * Every feature of the original is kept: hls.js with quality levels, own caption
+ * parser + renderer, skip intro/outro (with Undo), volume boost, speed, Cast,
+ * screenshot, download, fullscreen + orientation lock, resume, gestures, keys.
+ */
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import type * as React from 'react';
 import styled, { css, keyframes } from 'styled-components';
 import './GlassPlayer.css';
 import {
-  FiCheck,
-  FiMaximize,
-  FiMinimize,
-  FiPause,
-  FiPlay,
-  FiRotateCcw,
-  FiRotateCw,
-  FiSettings,
-  FiVolume2,
-  FiVolumeX,
-  FiCamera,
-  FiCast,
-} from 'react-icons/fi';
-import { FaForward } from 'react-icons/fa';
-import { MdClosedCaption, MdClosedCaptionOff, MdPictureInPictureAlt } from 'react-icons/md';
+  CameraIcon,
+  CheckIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ChromecastIcon,
+  ClosedCaptionsIcon,
+  ClosedCaptionsOnIcon,
+  DownloadIcon,
+  FullscreenExitIcon,
+  FullscreenIcon,
+  InfoIcon,
+  MuteIcon,
+  PauseIcon,
+  PlaybackSpeedCircleIcon,
+  PlayIcon,
+  SeekBackward10Icon,
+  SeekForward10Icon,
+  SettingsIcon,
+  VolumeHighIcon,
+  VolumeLowIcon,
+} from './icons';
 import { castMedia, CastCancelled, loadCastSdk } from '../../../lib/cast';
-import { activeText, decodeText, isThumbnailTrack, parseCaptions, type Cue } from '../../../lib/captions';
+import { activeText, decodeText, parseCaptions, type Cue } from '../../../lib/captions';
 
 export type GlassTrack = { url: string; label: string; srclang?: string; default?: boolean };
 type Range = { start: number; end: number };
+type Option = { value: boolean; onChange: (value: boolean) => void };
 
 type Props = {
   src: string;
@@ -31,41 +46,84 @@ type Props = {
   tracks: GlassTrack[];
   startTime?: number;
   autoPlay: boolean;
-  autoSkip: boolean;
-  autoNext: boolean;
-  intro?: Range;
-  outro?: Range;
+  intro?: Range | null;
+  outro?: Range | null;
+  autoplayOption?: Option;
+  autoNextOption?: Option;
+  autoSkipOption?: Option;
   /** quality labels that come from separate sources (used when the stream has no levels) */
   sourceQualities?: string[];
   sourceQuality?: string;
   onSourceQuality?: (label: string) => void;
   onReady?: () => void;
-  onError?: () => void;
+  /** the source cannot be played: let the page try another server */
+  onFail?: () => void;
   onEnded: () => void;
-  onNext: () => void;
   onProgress: (t: number, d: number) => void;
 };
 
-type Level = { index: number; height: number; bitrate: number };
+type WebkitVideo = HTMLVideoElement & { webkitEnterFullscreen?: () => void };
+type CastVideo = HTMLVideoElement & { remote?: { prompt: () => Promise<void> } };
+type SkipKind = 'intro' | 'outro';
+type MenuView = 'main' | 'captions' | 'style' | 'speed' | 'boost' | 'quality' | 'source';
+type Notice = { text: string; tone: 'default' | 'error' };
 
-const QUALITY_KEY = 'glass-quality';
-const PREFS_KEY = 'glass-caption-prefs';
-const SIZES = { S: 0.85, M: 1, L: 1.25, XL: 1.5 } as const;
-type SizeKey = keyof typeof SIZES;
+const CAPTION_FONT = '"Trebuchet MS", "Open Sans", "Segoe UI", Tahoma, sans-serif';
 const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2];
-
-const inRange = (t: number, r?: Range) => !!r && r.end > r.start && t >= r.start && t < r.end - 1;
-
-const fmt = (s: number) => {
-  if (!Number.isFinite(s) || s < 0) s = 0;
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = Math.floor(s % 60);
-  const mm = h ? String(m).padStart(2, '0') : String(m);
-  return `${h ? `${h}:` : ''}${mm}:${String(sec).padStart(2, '0')}`;
+const SEEK_STEP = 10;
+const AUTO_HIDE_MS = 3000;
+const CAPTION_SIZES = {
+  sm: { label: 'Small', scale: 0.88 },
+  md: { label: 'Medium', scale: 1.1 },
+  lg: { label: 'Large', scale: 1.4 },
+} as const;
+const CAPTION_STYLES = { box: 'Dark box', outline: 'Outline' } as const;
+type CaptionSize = keyof typeof CAPTION_SIZES;
+type CaptionStyle = keyof typeof CAPTION_STYLES;
+const CAPTION_PREFS_KEY = 'videoplayer:caption-style:v3';
+const QUALITY_KEY = 'videoplayer:quality';
+const BOOSTS = [1, 2, 3, 4] as const;
+const boostLabel = (b: number) => `${Math.round((b - 1) * 100)}%`;
+const MENU_TITLES: Record<MenuView, string> = {
+  main: 'Settings',
+  captions: 'Captions',
+  style: 'Caption style',
+  speed: 'Speed',
+  quality: 'Quality',
+  boost: 'Volume boost',
+  source: 'Quality',
 };
 
-/* ---------- Liquid Glass ---------- */
+const trackId = (t: GlassTrack) => `${t.srclang ?? ''}:${t.url}`;
+
+function formatTime(seconds: number) {
+  if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  const ss = s.toString().padStart(2, '0');
+  return h > 0 ? `${h}:${m.toString().padStart(2, '0')}:${ss}` : `${m}:${ss}`;
+}
+
+async function lockOrientation(video: HTMLVideoElement | null) {
+  const o = screen.orientation as any;
+  if (!o?.lock) return;
+  const portrait = video ? video.videoHeight > video.videoWidth : false;
+  try {
+    await o.lock(portrait ? 'portrait' : 'landscape');
+  } catch {
+    /* not supported here */
+  }
+}
+function unlockOrientation() {
+  try {
+    (screen.orientation as any)?.unlock?.();
+  } catch {
+    /* nothing to unlock */
+  }
+}
+
+/* ======================= Liquid Glass styling ======================= */
 
 const glass = css`
   position: relative;
@@ -90,171 +148,283 @@ const glass = css`
   }
 `;
 
-const Root = styled.div<{ $idle: boolean }>`
+const BAR_BUTTON = 'clamp(1.8rem, 4cqw, 2.75rem)';
+const BAR_ICON = 'clamp(1.35rem, 3.4cqw, 2.1rem)';
+const PILL_H = 'clamp(1.8rem, 4.1cqw, 2.6rem)';
+const PAD = 'clamp(0.5rem, 2.2cqw, 1.25rem)';
+
+const fadeIn = keyframes`from { opacity: 0; transform: translateY(6px) scale(.97); } to { opacity: 1; transform: none; }`;
+const spin = keyframes`to { transform: rotate(360deg); }`;
+
+const Root = styled.div<{ $hidden: boolean }>`
+  container-type: inline-size;
   position: absolute;
   inset: 0;
   background: #000;
   overflow: hidden;
+  outline: none;
   user-select: none;
+  touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
   font-family: 'Trebuchet MS', system-ui, sans-serif;
-  ${(p) => p.$idle && 'cursor: none;'}
+  ${(p) => p.$hidden && 'cursor: none;'}
 
   video {
-    position: absolute;
-    inset: 0;
     width: 100%;
     height: 100%;
     object-fit: contain;
-    background: #000;
-  }
-`;
-
-const Chrome = styled.div<{ $show: boolean }>`
-  position: absolute;
-  inset: 0;
-  z-index: 4;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  padding: 0.6rem 0.65rem 0.65rem;
-  pointer-events: none;
-  opacity: ${(p) => (p.$show ? 1 : 0)};
-  transition: opacity 0.25s ease;
-  background: ${(p) =>
-    p.$show
-      ? 'linear-gradient(180deg, rgba(0,0,0,.38), transparent 28%, transparent 62%, rgba(0,0,0,.5))'
-      : 'none'};
-
-  > * {
-    pointer-events: ${(p) => (p.$show ? 'auto' : 'none')};
-  }
-`;
-
-const TitlePill = styled.div`
-  ${glass}
-  align-self: flex-start;
-  max-width: 78%;
-  padding: 0.38rem 0.85rem;
-  border-radius: 999px;
-  font-size: 0.74rem;
-  font-weight: 700;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-`;
-
-const Bottom = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`;
-
-const Row = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.5rem;
-`;
-
-const Pill = styled.div`
-  ${glass}
-  display: inline-flex;
-  align-items: center;
-  gap: 0.1rem;
-  padding: 0.2rem 0.3rem;
-  border-radius: 999px;
-`;
-
-const Circle = styled.button`
-  ${glass}
-  display: grid;
-  place-items: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  padding: 0;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 1.1rem;
-`;
-
-const IconBtn = styled.button<{ $on?: boolean }>`
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
-  width: 2.3rem;
-  height: 2.3rem;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: ${(p) => (p.$on ? 'rgba(255,255,255,.55)' : 'transparent')};
-  color: inherit;
-  font-size: 1.2rem;
-  cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.4);
-  }
-  &:active {
-    transform: scale(0.92);
-  }
-  small {
-    position: absolute;
-    font-size: 0.5rem;
-    font-weight: 800;
-    margin-top: 0.1rem;
+    display: block;
   }
   svg {
     display: block;
   }
 `;
 
-const BarPill = styled.div`
-  ${glass}
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-  padding: 0.45rem 0.85rem;
-  border-radius: 999px;
-  font-size: 0.68rem;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+const Dim = styled.div<{ $on: boolean }>`
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: rgba(0, 0, 0, 0.2);
+  transition: opacity 0.3s;
+  opacity: ${(p) => (p.$on ? 1 : 0)};
+`;
 
-  span {
-    position: relative;
-    min-width: 2.2rem;
-  }
-  span:last-child {
-    text-align: right;
+const Layer = styled.div<{ $off: boolean; $from?: 'top' | 'bottom' }>`
+  position: absolute;
+  z-index: 10;
+  pointer-events: none;
+  transition:
+    opacity 0.3s ease,
+    transform 0.3s ease;
+  ${(p) =>
+    p.$off &&
+    `opacity: 0; transform: translateY(${p.$from === 'bottom' ? '8px' : p.$from === 'top' ? '-8px' : '0'});`}
+  & > * {
+    pointer-events: ${(p) => (p.$off ? 'none' : 'auto')};
   }
 `;
 
-const Track = styled.div`
+const TopBar = styled(Layer)`
+  inset: 0 0 auto 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: ${PAD};
+`;
+
+const Pill = styled.div`
+  ${glass}
+  display: flex;
+  align-items: center;
+  padding: clamp(0.125rem, 0.32cqw, 0.25rem);
+  border-radius: 999px;
+`;
+
+const Btn = styled.button<{ $on?: boolean }>`
   position: relative;
   z-index: 1;
-  flex: 1;
-  height: 1.4rem;
+  display: grid;
+  place-items: center;
+  width: ${BAR_BUTTON};
+  height: ${BAR_BUTTON};
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: ${(p) => (p.$on ? 'rgba(255,255,255,.5)' : 'transparent')};
+  color: inherit;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    transform 0.15s;
+  svg {
+    width: ${BAR_ICON};
+    height: ${BAR_ICON};
+  }
+  &:hover {
+    background: rgba(255, 255, 255, 0.45);
+  }
+  &:active {
+    transform: scale(0.93);
+  }
+`;
+
+const GearBtn = styled(Btn)<{ $open: boolean }>`
+  svg {
+    transition: transform 0.3s;
+    ${(p) => p.$open && 'transform: rotate(45deg);'}
+  }
+`;
+
+const VolWrap = styled.div`
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  .slot {
+    display: none;
+    width: 0;
+    overflow: hidden;
+    transition: width 0.3s ease;
+  }
+  @container (min-width: 32rem) {
+    .slot {
+      display: block;
+    }
+    &:hover .slot,
+    &:focus-within .slot {
+      width: 6rem;
+    }
+  }
+  .slot > div {
+    width: 6rem;
+    height: 1.4rem;
+    padding: 0 0.5rem;
+  }
+`;
+
+const CenterLayer = styled(Layer)`
+  inset: 0;
+`;
+
+const Round = styled.button<{ $size: string; $left: string }>`
+  ${glass}
+  position: absolute;
+  top: 50%;
+  left: ${(p) => p.$left};
+  width: ${(p) => p.$size};
+  height: ${(p) => p.$size};
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    background 0.2s,
+    transform 0.15s;
+  svg {
+    position: relative;
+    width: 74%;
+    height: 74%;
+  }
+  &:hover {
+    background: rgba(255, 255, 255, 0.5);
+  }
+  &:active {
+    transform: translate(-50%, -50%) scale(0.95);
+  }
+`;
+
+const Spin = styled.div`
+  position: relative;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  border: 3px solid rgba(0, 0, 0, 0.18);
+  border-top-color: #17171a;
+  animation: ${spin} 0.8s linear infinite;
+`;
+
+const BottomBar = styled(Layer)`
+  inset: auto 0 0 0;
+  padding: 0 clamp(0.75rem, 3.5cqw, 3rem) clamp(0.8rem, 3cqw, 2.25rem);
+`;
+
+const InfoRow = styled.div`
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: clamp(0.25rem, 1cqw, 0.75rem);
+`;
+
+const TimePill = styled.span`
+  ${glass}
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  height: ${PILL_H};
+  padding: 0 clamp(0.6rem, 1.6cqw, 1rem);
+  border-radius: 999px;
+  font-size: clamp(0.7rem, 1.7cqw, 0.95rem);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  span {
+    position: relative;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  em {
+    font-style: normal;
+    opacity: 0.6;
+  }
+  .ttl {
+    display: none;
+  }
+  @container (min-width: 28rem) {
+    .ttl {
+      display: inline;
+    }
+  }
+`;
+
+const FsBtn = styled.button`
+  ${glass}
+  display: grid;
+  place-items: center;
+  height: ${PILL_H};
+  width: clamp(2.4rem, 5.6cqw, 3.4rem);
+  padding: 0;
+  border-radius: clamp(0.9rem, 2.4cqw, 1.4rem);
+  cursor: pointer;
+  svg {
+    position: relative;
+    width: ${BAR_ICON};
+    height: ${BAR_ICON};
+  }
+  &:hover {
+    background: rgba(255, 255, 255, 0.5);
+  }
+`;
+
+const SeekWrap = styled.div`
+  ${glass}
+  display: flex;
+  align-items: center;
+  height: 1.7rem;
+  padding: 0 0.8rem;
+  border-radius: 999px;
+`;
+
+/* custom slider (replaces Radix) */
+const SliderBox = styled.div`
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   cursor: pointer;
   touch-action: none;
-`;
-
-const Rail = styled.div`
-  position: relative;
-  width: 100%;
-  height: 0.28rem;
-  border-radius: 999px;
-  background: rgba(0, 0, 0, 0.2);
-  overflow: visible;
-
-  i {
+  outline: none;
+  .rail {
+    position: relative;
+    width: 100%;
+    height: 0.3rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.2);
+    transition: height 0.15s;
+  }
+  &:hover .rail,
+  &.drag .rail {
+    height: 0.4rem;
+  }
+  .buf,
+  .fill {
     position: absolute;
-    left: 0;
-    top: 0;
-    bottom: 0;
+    inset: 0 auto 0 0;
     border-radius: inherit;
   }
   .buf {
@@ -263,7 +433,7 @@ const Rail = styled.div`
   .fill {
     background: #17171a;
   }
-  .knob {
+  .thumb {
     position: absolute;
     top: 50%;
     width: 0.85rem;
@@ -271,184 +441,371 @@ const Rail = styled.div`
     margin: -0.425rem 0 0 -0.425rem;
     border-radius: 50%;
     background: #fff;
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.4);
+    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.45);
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  &:hover .thumb,
+  &.drag .thumb,
+  &:focus-visible .thumb {
+    opacity: 1;
   }
 `;
 
-const Center = styled.button<{ $show: boolean }>`
-  ${glass}
+function Slider({
+  value,
+  max,
+  step,
+  label,
+  buffered = 0,
+  onChange,
+  onCommit,
+}: {
+  value: number;
+  max: number;
+  step: number;
+  label: string;
+  buffered?: number;
+  onChange: (v: number) => void;
+  onCommit?: (v: number) => void;
+}) {
+  const [drag, setDrag] = useState(false);
+  const last = useRef(value);
+  const pct = max ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
+  const at = (e: { clientX: number; currentTarget: HTMLDivElement }) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const raw = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)) * max;
+    return Math.round(raw / step) * step;
+  };
+  return (
+    <SliderBox
+      className={drag ? 'drag' : ''}
+      role='slider'
+      aria-label={label}
+      aria-valuemin={0}
+      aria-valuemax={max}
+      aria-valuenow={value}
+      tabIndex={0}
+      onPointerDown={(e) => {
+        e.currentTarget.setPointerCapture(e.pointerId);
+        setDrag(true);
+        last.current = at(e);
+        onChange(last.current);
+      }}
+      onPointerMove={(e) => {
+        if (!drag) return;
+        last.current = at(e);
+        onChange(last.current);
+      }}
+      onPointerUp={() => {
+        setDrag(false);
+        onCommit?.(last.current);
+      }}
+      onPointerCancel={() => {
+        setDrag(false);
+        onCommit?.(last.current);
+      }}
+      onKeyDown={(e) => {
+        const d = e.key === 'ArrowRight' ? step * 5 : e.key === 'ArrowLeft' ? -step * 5 : 0;
+        if (!d) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const v = Math.min(max, Math.max(0, value + d));
+        onChange(v);
+        onCommit?.(v);
+      }}
+    >
+      <div className='rail'>
+        <div className='buf' style={{ width: `${buffered}%` }} />
+        <div className='fill' style={{ width: `${pct}%` }} />
+        <div className='thumb' style={{ left: `${pct}%` }} />
+      </div>
+    </SliderBox>
+  );
+}
+
+const Skips = styled.div`
+  position: absolute;
+  z-index: 20;
+  right: ${PAD};
+  bottom: clamp(5.4rem, 13cqw, 8.4rem);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5em;
+  font-size: clamp(0.75rem, 1.9cqw, 1.05rem);
+  animation: ${fadeIn} 0.2s ease;
+
+  button {
+    ${glass}
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5em;
+    padding: 0.6em 1.1em;
+    border-radius: 999px;
+    font: inherit;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  button svg {
+    position: relative;
+    width: 1.5em;
+    height: 1.5em;
+  }
+  .toast {
+    ${glass}
+    display: flex;
+    align-items: center;
+    gap: 0.7em;
+    padding: 0.4em 0.5em 0.4em 1em;
+    border-radius: 999px;
+    font-weight: 700;
+  }
+  .toast span {
+    position: relative;
+  }
+  .toast button {
+    padding: 0.25em 0.9em;
+    background: rgba(255, 255, 255, 0.5);
+    box-shadow: none;
+  }
+`;
+
+const CaptionBox = styled.div`
   position: absolute;
   z-index: 5;
-  left: 50%;
-  top: 50%;
-  display: grid;
-  place-items: center;
-  width: 4.2rem;
-  height: 4.2rem;
-  margin: -2.1rem 0 0 -2.1rem;
-  padding: 0;
-  border-radius: 50%;
-  font-size: 1.9rem;
-  cursor: pointer;
-  opacity: ${(p) => (p.$show ? 1 : 0)};
-  pointer-events: ${(p) => (p.$show ? 'auto' : 'none')};
-  transition: opacity 0.2s ease;
-
-  svg {
-    margin-left: 0.15rem;
+  left: 0;
+  right: 0;
+  bottom: clamp(2.1rem, 6.5cqw, 5rem);
+  display: flex;
+  justify-content: center;
+  padding: 0 5cqw;
+  pointer-events: none;
+  p {
+    margin: 0;
+    max-width: min(100%, 52em);
+    text-align: center;
+    line-height: 1.3;
+    font-weight: 700;
+    letter-spacing: 0.005em;
+    text-wrap: balance;
+    white-space: pre-line;
+    color: #fff;
+  }
+  .outline {
+    -webkit-text-stroke: 0.2em rgba(0, 0, 0, 0.95);
+    paint-order: stroke fill;
+    stroke-linejoin: round;
+    text-shadow:
+      0 0 0.1em #000,
+      0 0 0.1em #000,
+      0.03em 0.06em 0.16em rgba(0, 0, 0, 0.95),
+      0 0.1em 0.38em rgba(0, 0, 0, 0.65);
+  }
+  .box {
+    padding: 0.12em 0.6em;
+    border-radius: 0.35em;
+    background: rgba(0, 0, 0, 0.75);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+    box-shadow: 0 0.1em 0.4em rgba(0, 0, 0, 0.4);
   }
 `;
 
-const spin = keyframes`to { transform: rotate(360deg); }`;
-
-const Spinner = styled.div`
+const Flash = styled.div<{ $dir: 'back' | 'forward' }>`
   position: absolute;
-  z-index: 3;
-  left: 50%;
+  z-index: 5;
   top: 50%;
-  width: 2.6rem;
-  height: 2.6rem;
-  margin: -1.3rem 0 0 -1.3rem;
-  border-radius: 50%;
-  border: 3px solid rgba(255, 255, 255, 0.25);
-  border-top-color: #fff;
-  animation: ${spin} 0.8s linear infinite;
+  ${(p) => (p.$dir === 'back' ? 'left: 12%;' : 'right: 12%;')}
+  transform: translateY(-50%);
   pointer-events: none;
+  animation: ${fadeIn} 0.2s ease;
+  > div {
+    ${glass}
+    display: grid;
+    place-items: center;
+    width: clamp(3rem, 10cqw, 5rem);
+    height: clamp(3rem, 10cqw, 5rem);
+    border-radius: 50%;
+  }
+  svg {
+    position: relative;
+    width: 70%;
+    height: 70%;
+  }
 `;
 
-const SkipPill = styled.button`
-  ${glass}
+const Fill = styled.div`
   position: absolute;
-  z-index: 6;
-  right: 0.75rem;
-  bottom: 6.4rem;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.4rem;
-  padding: 0.5rem 0.95rem;
-  border-radius: 999px;
-  font: inherit;
-  font-size: 0.78rem;
-  font-weight: 800;
-  cursor: pointer;
-`;
-
-/* Crunchyroll-style captions: bold white Trebuchet MS with a heavy black outline. */
-const Caption = styled.div<{ $lift: boolean; $size: number; $box: boolean }>`
-  position: absolute;
-  z-index: 2;
-  left: 4%;
-  right: 4%;
-  bottom: ${(p) => (p.$lift ? '6.6rem' : '5%')};
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 1rem;
   text-align: center;
-  pointer-events: none;
-  transition: bottom 0.25s ease;
-  font-family: 'Trebuchet MS', Verdana, sans-serif;
-  font-weight: 700;
-  font-size: ${(p) => p.$size}px;
-  line-height: 1.22;
+  background: #000;
   color: #fff;
-  -webkit-text-stroke: 0.1em #000;
-  paint-order: stroke fill;
-  text-shadow:
-    0 0 0.12em #000,
-    0.06em 0.06em 0 #000,
-    -0.06em 0.06em 0 #000,
-    0.06em -0.06em 0 #000,
-    -0.06em -0.06em 0 #000,
-    0 0.08em 0.14em rgba(0, 0, 0, 0.85);
-  white-space: pre-line;
-  ${(p) =>
-    p.$box &&
-    css`
-      -webkit-text-stroke: 0;
-      text-shadow: none;
-      span {
-        display: inline;
-        padding: 0.08em 0.4em;
-        border-radius: 0.3em;
-        background: rgba(0, 0, 0, 0.75);
-        box-decoration-break: clone;
-        -webkit-box-decoration-break: clone;
-      }
-    `}
+  .in {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    max-width: 24rem;
+  }
+  svg {
+    width: 2.5rem;
+    height: 2.5rem;
+    opacity: 0.7;
+  }
+  p {
+    margin: 0;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+  small {
+    font-size: 0.72rem;
+    opacity: 0.6;
+  }
 `;
 
-const Notice = styled.div`
+const NoticeBox = styled.div<{ $error: boolean }>`
   ${glass}
   position: absolute;
-  z-index: 8;
-  top: 0.8rem;
+  z-index: 30;
+  top: clamp(3.5rem, 9.5cqw, 5rem);
   left: 50%;
   transform: translateX(-50%);
-  padding: 0.4rem 0.95rem;
+  max-width: 90%;
+  padding: 0.5rem 1rem;
   border-radius: 999px;
+  text-align: center;
   font-size: 0.74rem;
   font-weight: 700;
-  white-space: nowrap;
   pointer-events: none;
+  ${(p) => p.$error && 'background: rgba(255, 90, 90, 0.7); color: #fff;'}
 `;
 
-const Slide = styled.input`
-  position: relative;
-  width: 100%;
-  accent-color: #17171a;
-  height: 1.3rem;
-`;
-
-const Panel = styled.div`
-  ${glass}
+const MenuWrap = styled.div`
   position: absolute;
-  z-index: 7;
-  right: 0.65rem;
-  bottom: 6.2rem;
-  width: min(17rem, calc(100% - 1.3rem));
-  max-height: calc(100% - 7.6rem);
-  overflow-y: auto;
-  padding: 0.7rem 0.75rem 0.8rem;
-  border-radius: 1.4rem;
-  background: rgba(255, 255, 255, 0.5);
+  z-index: 30;
+  top: clamp(3.1rem, 7.4cqw, 4.4rem);
+  right: ${PAD};
+  display: flex;
+  flex-direction: column;
+  width: clamp(14rem, 39cqw, 26rem);
+  max-width: calc(100% - 1rem);
+  max-height: calc(100% - clamp(3.1rem, 7.4cqw, 4.4rem) - clamp(0.5rem, 5cqw, 3.5rem));
+  transform-origin: top right;
+  animation: ${fadeIn} 0.15s ease;
+  font-size: clamp(0.75rem, 1.9cqw, 1.05rem);
+  color: #17171a;
 
-  h4 {
+  .sheet {
+    ${glass}
+    min-height: 0;
+    overflow-y: auto;
+    padding: 0.55em;
+    border-radius: 1.5em;
+    background: rgba(255, 255, 255, 0.52);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4em;
+  }
+  .sheet > * {
     position: relative;
-    margin: 0.55rem 0 0.35rem;
-    font-size: 0.64rem;
+    flex: none;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    gap: 0.75em;
+    width: 100%;
+    padding: 0.6em 0.9em;
+    border: 1px solid rgba(255, 255, 255, 0.6);
+    border-radius: 1em;
+    background: rgba(255, 255, 255, 0.35);
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .row:hover {
+    background: rgba(255, 255, 255, 0.6);
+  }
+  .row.sel {
+    background: rgba(255, 255, 255, 0.75);
+    border-color: #fff;
+  }
+  .row svg {
+    flex: none;
+    width: 1.5em;
+    height: 1.5em;
+  }
+  .row .lab {
+    flex: 1;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .row .val {
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.6;
+  }
+  .cap {
+    margin: 0;
+    padding: 0.3em 0.9em 0;
+    font-size: 0.75em;
     font-weight: 800;
     letter-spacing: 0.07em;
     text-transform: uppercase;
-    opacity: 0.6;
+    opacity: 0.55;
   }
-  h4:first-child {
-    margin-top: 0;
-  }
-  .chips {
-    position: relative;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.3rem;
-  }
-  button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    padding: 0.32rem 0.7rem;
-    border: 1px solid rgba(255, 255, 255, 0.6);
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.35);
-    color: #17171a;
-    font: inherit;
-    font-size: 0.72rem;
-    font-weight: 700;
-    cursor: pointer;
-  }
-  button.on {
-    background: #17171a;
-    border-color: #17171a;
-    color: #fff;
+  .hint {
+    margin: 0;
+    padding: 0.3em 0.9em;
+    font-size: 0.8em;
+    opacity: 0.65;
   }
 `;
 
-/* ---------- component ---------- */
+/* menu rows live at module level so they keep their identity between renders */
+function Row({
+  icon,
+  label,
+  value,
+  onClick,
+  chevron = true,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value?: string;
+  onClick: () => void;
+  chevron?: boolean;
+}) {
+  return (
+    <button type='button' className='row' onClick={onClick}>
+      {icon}
+      <span className='lab'>{label}</span>
+      {value && <span className='val'>{value}</span>}
+      {chevron && <ChevronRightIcon />}
+    </button>
+  );
+}
+function Opt({ label, selected, onClick }: { label: string; selected: boolean; onClick: () => void }) {
+  return (
+    <button type='button' className={`row${selected ? ' sel' : ''}`} onClick={onClick}>
+      <span className='lab'>{label}</span>
+      {selected && <CheckIcon />}
+    </button>
+  );
+}
+
+/* ============================== component ============================== */
 
 export default function GlassPlayer({
   src,
@@ -456,297 +813,216 @@ export default function GlassPlayer({
   title,
   poster,
   tracks,
-  startTime = 0,
+  startTime,
   autoPlay,
-  autoSkip,
-  autoNext,
   intro,
   outro,
+  autoplayOption,
+  autoNextOption,
+  autoSkipOption,
   sourceQualities = [],
   sourceQuality = 'auto',
   onSourceQuality,
   onReady,
-  onError,
+  onFail,
   onEnded,
-  onNext,
   onProgress,
 }: Props) {
-  const rootRef = useRef<HTMLDivElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const hlsRef = useRef<any>(null);
-  const hideTimer = useRef<number | undefined>(undefined);
-  const lastReport = useRef(0);
-  const resumed = useRef(false);
-  const draggingRef = useRef(false);
-
-  const [playing, setPlaying] = useState(false);
-  const [waiting, setWaiting] = useState(true);
-  const [time, setTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [buffered, setBuffered] = useState(0);
-  const [muted, setMuted] = useState(false);
-  const [speed, setSpeed] = useState(1);
-  const [show, setShow] = useState(true);
-  const [panel, setPanel] = useState(false);
-  const [full, setFull] = useState(false);
-  const [boxH, setBoxH] = useState(360);
-  const [levels, setLevels] = useState<Level[]>([]);
-  const [level, setLevel] = useState(-1);
-  const [liveLevel, setLiveLevel] = useState(-1);
-  const [cues, setCues] = useState<Cue[]>([]);
-  const [trackUrl, setTrackUrl] = useState<string | null>(null);
-  const [size, setSize] = useState<SizeKey>('M');
-  const [offset, setOffset] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [boost, setBoost] = useState(1);
-  const [capStyle, setCapStyle] = useState<'outline' | 'box'>('outline');
-  const [notice, setNotice] = useState('');
-  const audioRef = useRef<{ ctx: AudioContext; gain: GainNode } | null>(null);
-  const noticeTimer = useRef<number | undefined>(undefined);
-
   const isHls = type === 'hls';
 
-  // saved caption size
+  const onFailRef = useRef(onFail);
   useEffect(() => {
-    try {
-      const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
-      if (p.size in SIZES) setSize(p.size as SizeKey);
-      if (p.style === 'box' || p.style === 'outline') setCapStyle(p.style);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+    onFailRef.current = onFail;
+  });
+  // After the source really started, a hiccup must never swap servers.
+  const startedRef = useRef(false);
+  const autoTriedRef = useRef(false);
+  const endedRef = useRef(false);
+  const autoPlayRef = useRef(autoPlay);
+  const startAtRef = useRef(startTime);
+  const resumedRef = useRef<string | null>(null);
+  const onProgressRef = useRef(onProgress);
+  const onEndedRef = useRef(onEnded);
+  const lastReportRef = useRef(0);
+  useEffect(() => {
+    autoPlayRef.current = autoPlay;
+    startAtRef.current = startTime;
+    onProgressRef.current = onProgress;
+    onEndedRef.current = onEnded;
+  });
 
-  // keep the caption size proportional to the player
-  useEffect(() => {
-    const el = rootRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
-    const ro = new ResizeObserver(() => setBoxH(el.clientHeight || 360));
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<any>(null);
+  const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const settingsOpenRef = useRef(false);
+  const cueCache = useRef(new Map<string, Cue[]>());
+  const cuesRef = useRef<Cue[]>([]);
+  const offsetRef = useRef(0);
+  const audioRef = useRef<{ ctx: AudioContext; gain: GainNode } | null>(null);
 
-  /* ----- source (hls.js / native / mp4) ----- */
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [buffered, setBuffered] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(false);
+  const [boost, setBoost] = useState(1);
+  const [cors, setCors] = useState(true);
+  const [speed, setSpeed] = useState(1);
+  const [fullscreen, setFullscreen] = useState(false);
+  const [showControls, setShowControls] = useState(true);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [menuView, setMenuView] = useState<MenuView>('main');
+  const [castSupported, setCastSupported] = useState(false);
+  const [scrubbing, setScrubbing] = useState(false);
+  const [cueText, setCueText] = useState('');
+  const [cueVersion, setCueVersion] = useState(0);
+  const [captionSize, setCaptionSize] = useState<CaptionSize>('md');
+  const [captionStyle, setCaptionStyle] = useState<CaptionStyle>('outline');
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [flash, setFlash] = useState<{ dir: 'back' | 'forward'; key: number } | null>(null);
+  const [levels, setLevels] = useState<{ index: number; height: number; bitrate: number }[]>([]);
+  const [quality, setQuality] = useState(-1); // -1 = Auto
+  const [liveLevel, setLiveLevel] = useState(-1);
+
+  /* ---------- intro / outro skipping ---------- */
+  const skipRef = useRef({ intro, outro, auto: Boolean(autoSkipOption?.value) });
   useEffect(() => {
+    skipRef.current = { intro, outro, auto: Boolean(autoSkipOption?.value) };
+  });
+  const skippedRef = useRef<Record<SkipKind, boolean>>({ intro: false, outro: false });
+  const insideRef = useRef<Record<SkipKind, boolean>>({ intro: false, outro: false });
+  const lastTimeRef = useRef(0);
+  const skipToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [skipTarget, setSkipTarget] = useState<SkipKind | null>(null);
+  const [skipToast, setSkipToast] = useState<{ kind: SkipKind; from: number } | null>(null);
+
+  const skipTo = (kind: SkipKind, automatic: boolean) => {
     const v = videoRef.current;
-    if (!v) return;
-    let cancelled = false;
-    let native = false;
-    resumed.current = false;
-    setLevels([]);
-    setLevel(-1);
-    setLiveLevel(-1);
-    setWaiting(true);
-    setTime(0);
-
-    if (!isHls) {
-      v.src = src;
-      return () => {
-        cancelled = true;
-        v.removeAttribute('src');
-        v.load();
-      };
+    const range = kind === 'intro' ? skipRef.current.intro : skipRef.current.outro;
+    if (!v || !range) return;
+    const from = v.currentTime;
+    skippedRef.current[kind] = true;
+    setSkipTarget(null);
+    // an outro that runs to the end jumps to the very end so the next episode can start
+    const end =
+      Number.isFinite(v.duration) && range.end >= v.duration - 2 ? Math.max(0, v.duration - 0.05) : range.end;
+    v.currentTime = end;
+    if (v.paused && !automatic) void v.play().catch(() => {});
+    if (automatic) {
+      setSkipToast({ kind, from });
+      if (skipToastTimer.current) clearTimeout(skipToastTimer.current);
+      skipToastTimer.current = setTimeout(() => setSkipToast(null), 5000);
     }
+  };
+  const undoSkip = () => {
+    const v = videoRef.current;
+    if (v && skipToast) v.currentTime = skipToast.from;
+    setSkipToast(null);
+  };
+  const checkSkip = (v: HTMLVideoElement) => {
+    const t = v.currentTime;
+    const { intro: i, outro: o, auto } = skipRef.current;
+    const inside = (r: Range | null | undefined) =>
+      Boolean(r) && r!.end > r!.start && t >= r!.start - 0.3 && t < r!.end - 0.6;
+    const now: Record<SkipKind, boolean> = { intro: inside(i), outro: inside(o) };
+    const natural = Math.abs(t - lastTimeRef.current) < 3;
+    lastTimeRef.current = t;
+    for (const kind of ['intro', 'outro'] as const) {
+      // jumped straight into the range (scrub / Undo): never auto-skip it, keep the button
+      if (now[kind] && !insideRef.current[kind] && !natural) skippedRef.current[kind] = true;
+    }
+    insideRef.current = now;
+    const kind: SkipKind | null = now.intro ? 'intro' : now.outro ? 'outro' : null;
+    if (kind && auto && !skippedRef.current[kind] && !v.paused) {
+      skipTo(kind, true);
+      return;
+    }
+    setSkipTarget((cur) => (cur === kind ? cur : kind));
+  };
+  useEffect(() => {
+    skippedRef.current = { intro: false, outro: false };
+    insideRef.current = { intro: false, outro: false };
+    lastTimeRef.current = 0;
+    setSkipTarget(null);
+    setSkipToast(null);
+  }, [src]);
 
-    import('hls.js')
-      .then(({ default: Hls }: any) => {
-        if (cancelled) return;
-        if (!Hls.isSupported()) {
-          if (v.canPlayType('application/vnd.apple.mpegurl')) {
-            native = true;
-            v.src = src;
-          } else onError?.();
-          return;
-        }
-        let net = 0;
-        let media = 0;
-        const hls = new Hls({ enableWorker: true, maxBufferLength: 40, backBufferLength: 30 });
-        hlsRef.current = hls;
-        hls.on(Hls.Events.MANIFEST_PARSED, (_e: any, data: any) => {
-          const best = new Map<number, Level>();
-          data.levels.forEach((l: any, index: number) => {
-            const key = l.height || Math.round(l.bitrate / 1000);
-            const have = best.get(key);
-            if (!have || l.bitrate > have.bitrate) {
-              best.set(key, { index, height: l.height || 0, bitrate: l.bitrate });
-            }
-          });
-          const list = [...best.values()].sort((a, b) => b.height - a.height || b.bitrate - a.bitrate);
-          setLevels(list);
-          try {
-            const saved = Number(localStorage.getItem(QUALITY_KEY));
-            const hit = saved ? list.find((l) => l.height === saved) : undefined;
-            if (hit) {
-              hls.currentLevel = hit.index;
-              setLevel(hit.index);
-            }
-          } catch {
-            /* start on Auto */
-          }
-        });
-        hls.on(Hls.Events.LEVEL_SWITCHED, (_e: any, d: any) => setLiveLevel(d.level));
-        hls.on(Hls.Events.FRAG_LOADED, () => {
-          net = 0;
-          media = 0;
-        });
-        hls.on(Hls.Events.ERROR, (_e: any, data: any) => {
-          if (!data.fatal) return;
-          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && net < 3) {
-            net += 1;
-            window.setTimeout(() => hlsRef.current === hls && hls.startLoad(), 500 * net);
-          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR && media < 3) {
-            media += 1;
-            if (media === 2) hls.swapAudioCodec();
-            hls.recoverMediaError();
-          } else onError?.();
-        });
-        hls.loadSource(src);
-        hls.attachMedia(v);
-      })
-      .catch(() => onError?.());
+  const reportFail = () => {
+    if (!startedRef.current) onFailRef.current?.();
+  };
+  const fireEnded = () => {
+    if (endedRef.current) return;
+    endedRef.current = true;
+    setPlaying(false);
+    onEndedRef.current();
+  };
 
-    return () => {
-      cancelled = true;
-      const h = hlsRef.current;
-      hlsRef.current = null;
-      h?.destroy();
-      if (native) {
-        v.removeAttribute('src');
-        v.load();
+  /* ---------- feedback + helpers ---------- */
+  const showNotice = useCallback((text: string, tone: Notice['tone'] = 'default') => {
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    setNotice({ text, tone });
+    noticeTimer.current = setTimeout(() => setNotice(null), 2800);
+  }, []);
+  const flashSeek = (dir: 'back' | 'forward') => {
+    if (flashTimer.current) clearTimeout(flashTimer.current);
+    setFlash({ dir, key: Date.now() });
+    flashTimer.current = setTimeout(() => setFlash(null), 650);
+  };
+  const updateBuffered = (v: HTMLVideoElement) => {
+    const r = v.buffered;
+    let end = 0;
+    for (let i = 0; i < r.length; i++) {
+      if (r.start(i) <= v.currentTime + 0.5 && r.end(i) >= v.currentTime) {
+        end = r.end(i);
+        break;
       }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [src, isHls]);
-
-  /* ----- captions (fetched and parsed here, drawn by us) ----- */
-  const usable = useMemo(() => tracks.filter((t) => t?.url), [tracks]);
-  useEffect(() => {
-    const pick = usable.find((t) => /^en/i.test(t.srclang || '') && t.default) || usable.find((t) => t.default) || usable.find((t) => /^en/i.test(t.srclang || '')) || usable[0];
-    setTrackUrl(pick?.url ?? null);
-  }, [usable]);
-
-  useEffect(() => {
-    setCues([]);
-    if (!trackUrl) return;
-    const ctl = new AbortController();
-    fetch(trackUrl, { signal: ctl.signal })
-      .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject()))
-      .then((buf) => {
-        const parsed = parseCaptions(decodeText(buf));
-        if (!isThumbnailTrack(parsed.cues)) setCues(parsed.cues);
-      })
-      .catch(() => {});
-    return () => ctl.abort();
-  }, [trackUrl]);
-
-  const captionText = trackUrl ? activeText(cues, time + offset) : '';
-
-  /* ----- controls visibility ----- */
-  const wake = useCallback(() => {
-    setShow(true);
-    window.clearTimeout(hideTimer.current);
-    hideTimer.current = window.setTimeout(() => {
-      const v = videoRef.current;
-      if (v && !v.paused && !draggingRef.current) setShow(false);
-    }, 3200);
-  }, []);
-  useEffect(() => () => window.clearTimeout(hideTimer.current), []);
-  useEffect(() => {
-    if (!playing) {
-      window.clearTimeout(hideTimer.current);
-      setShow(true);
-    } else wake();
-  }, [playing, wake]);
-
-  useEffect(() => {
-    const on = () => setFull(!!document.fullscreenElement);
-    document.addEventListener('fullscreenchange', on);
-    return () => document.removeEventListener('fullscreenchange', on);
-  }, []);
-
-  /* ----- actions ----- */
-  const toggle = useCallback(() => {
+    }
+    setBuffered(end);
+  };
+  const togglePlay = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
-    if (v.paused) void v.play().catch(() => {});
+    if (v.paused) void v.play().catch(() => undefined);
     else v.pause();
   }, []);
-  const seekBy = (d: number) => {
+  const seekBy = useCallback((delta: number) => {
     const v = videoRef.current;
-    if (v) v.currentTime = Math.max(0, Math.min(v.duration || 1e9, v.currentTime + d));
-    wake();
-  };
-  const toggleMute = () => {
+    if (!v) return;
+    v.currentTime = Math.min(Math.max(v.currentTime + delta, 0), v.duration || 0);
+  }, []);
+  const toggleMute = useCallback(() => {
     const v = videoRef.current;
     if (!v) return;
     v.muted = !v.muted;
-    if (!v.muted && v.volume === 0) changeVolume(1);
     setMuted(v.muted);
-  };
-  const toggleFull = async () => {
-    const el = rootRef.current;
-    const v = videoRef.current as any;
-    try {
-      if (document.fullscreenElement) await document.exitFullscreen();
-      else if (el && document.fullscreenEnabled) {
-        await el.requestFullscreen();
-        try {
-          await (screen.orientation as any)?.lock?.('landscape');
-        } catch {
-          /* not supported */
-        }
-      } else v?.webkitEnterFullscreen?.();
-    } catch {
-      /* refused */
-    }
-  };
-  const pickLevel = (index: number) => {
-    const h = hlsRef.current;
-    if (!h) return;
-    h.currentLevel = index;
-    setLevel(index);
-    try {
-      const height = levels.find((l) => l.index === index)?.height;
-      if (index === -1 || !height) localStorage.removeItem(QUALITY_KEY);
-      else localStorage.setItem(QUALITY_KEY, String(height));
-    } catch {
-      /* ignore */
-    }
-  };
-  const pickSpeed = (s: number) => {
-    if (videoRef.current) videoRef.current.playbackRate = s;
-    setSpeed(s);
-  };
-  const say = (text: string) => {
-    setNotice(text);
-    window.clearTimeout(noticeTimer.current);
-    noticeTimer.current = window.setTimeout(() => setNotice(''), 2600);
-  };
-  const pickStyle = (st: 'outline' | 'box') => {
-    setCapStyle(st);
-    try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ size, style: st }));
-    } catch {
-      /* ignore */
-    }
-  };
-  const changeVolume = (value: number) => {
+  }, []);
+  const changeVolume = useCallback((value: number) => {
     const v = videoRef.current;
     if (!v) return;
     v.volume = value;
     v.muted = value === 0;
     setVolume(value);
     setMuted(value === 0);
-  };
-  // Volume boost: audio goes through a Web Audio gain node (needs CORS-readable media).
-  const changeBoost = (value: number) => {
+  }, []);
+
+  // Volume boost: a Web Audio gain node with a fast limiter (needs CORS-readable media).
+  const changeBoost = useCallback((value: number) => {
     const v = videoRef.current;
     if (!v) return;
     try {
       if (!audioRef.current) {
-        if (value === 1) return setBoost(1);
+        if (value === 1) {
+          setBoost(1);
+          return;
+        }
         const Ctx = window.AudioContext ?? (window as any).webkitAudioContext;
-        if (!Ctx) return say('Volume boost is not supported here');
+        if (!Ctx) return;
         const ctx: AudioContext = new Ctx();
         const source = ctx.createMediaElementSource(v);
         const gain = ctx.createGain();
@@ -759,424 +1035,938 @@ export default function GlassPlayer({
         source.connect(gain).connect(limiter).connect(ctx.destination);
         audioRef.current = { ctx, gain };
       }
-      audioRef.current.gain.gain.value = value;
-      if (audioRef.current.ctx.state === 'suspended') void audioRef.current.ctx.resume();
+      const { ctx, gain } = audioRef.current;
+      gain.gain.value = value;
+      if (ctx.state === 'suspended') void ctx.resume();
       setBoost(value);
     } catch {
       setBoost(1);
-      say('Volume boost is not available for this video');
+    }
+  }, []);
+  useEffect(() => {
+    if (playing && audioRef.current?.ctx.state === 'suspended') void audioRef.current.ctx.resume();
+  }, [playing]);
+  useEffect(() => {
+    // new source = new <video> element (keyed), so the old audio graph is gone
+    setCors(true);
+    audioRef.current = null;
+    setBoost(1);
+    startedRef.current = false;
+    autoTriedRef.current = false;
+    endedRef.current = false;
+  }, [src]);
+
+  /* ---------- hls.js ---------- */
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || !isHls) return;
+    let cancelled = false;
+    let native = false;
+    setLevels([]);
+    setQuality(-1);
+    setLiveLevel(-1);
+    import('hls.js')
+      .then(({ default: Hls }: any) => {
+        if (cancelled) return;
+        if (!Hls.isSupported()) {
+          if (video.canPlayType('application/vnd.apple.mpegurl')) {
+            native = true;
+            video.src = src;
+            return;
+          }
+          setLoading(false);
+          setError(true);
+          reportFail();
+          return;
+        }
+        let netRetries = 0;
+        let mediaRetries = 0;
+        const hls = new Hls({ enableWorker: true, maxBufferLength: 40, backBufferLength: 30 });
+        hlsRef.current = hls;
+        hls.on(Hls.Events.MANIFEST_PARSED, (_e: any, data: any) => {
+          // one entry per picture height (the best bitrate of each), tallest first
+          const best = new Map<number, { index: number; height: number; bitrate: number }>();
+          data.levels.forEach((l: any, index: number) => {
+            const key = l.height || Math.round(l.bitrate / 1000);
+            const have = best.get(key);
+            if (!have || l.bitrate > have.bitrate) best.set(key, { index, height: l.height || 0, bitrate: l.bitrate });
+          });
+          const list = [...best.values()].sort((a, b) => b.height - a.height || b.bitrate - a.bitrate);
+          setLevels(list);
+          try {
+            const saved = Number(localStorage.getItem(QUALITY_KEY));
+            const match = saved ? list.find((l) => l.height === saved) : undefined;
+            if (match) {
+              hls.currentLevel = match.index;
+              setQuality(match.index);
+            }
+          } catch {
+            /* start on Auto */
+          }
+        });
+        hls.on(Hls.Events.LEVEL_SWITCHED, (_e: any, d: any) => setLiveLevel(d.level));
+        hls.on(Hls.Events.FRAG_LOADED, () => {
+          netRetries = 0;
+          mediaRetries = 0;
+        });
+        hls.on(Hls.Events.ERROR, (_e: any, data: any) => {
+          if (!data.fatal) return;
+          if (data.type === Hls.ErrorTypes.NETWORK_ERROR && netRetries < 4) {
+            netRetries += 1;
+            window.setTimeout(() => hlsRef.current === hls && hls.startLoad(), 500 * netRetries);
+          } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR && mediaRetries < 3) {
+            mediaRetries += 1;
+            if (mediaRetries === 2) hls.swapAudioCodec();
+            hls.recoverMediaError();
+          } else {
+            setLoading(false);
+            setError(true);
+            reportFail();
+          }
+        });
+        hls.loadSource(src);
+        hls.attachMedia(video);
+      })
+      .catch(() => {
+        setLoading(false);
+        setError(true);
+        reportFail();
+      });
+    return () => {
+      cancelled = true;
+      const hls = hlsRef.current;
+      hlsRef.current = null;
+      hls?.destroy();
+      if (native) {
+        video.removeAttribute('src');
+        video.load();
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src, isHls]);
+
+  const changeQuality = (index: number) => {
+    const hls = hlsRef.current;
+    if (!hls) return;
+    hls.currentLevel = index;
+    setQuality(index);
+    try {
+      const height = levels.find((l) => l.index === index)?.height;
+      if (index === -1 || !height) localStorage.removeItem(QUALITY_KEY);
+      else localStorage.setItem(QUALITY_KEY, String(height));
+    } catch {
+      /* ignore */
     }
   };
-  const screenshot = () => {
+  const levelLabel = (l: { height: number; bitrate: number }) =>
+    l.height ? `${l.height}p` : `${Math.round(l.bitrate / 1000)} kbps`;
+  const qualityValue = () => {
+    if (quality !== -1) {
+      const l = levels.find((x) => x.index === quality);
+      return l ? levelLabel(l) : 'Auto';
+    }
+    const playingLevel = hlsRef.current?.levels?.[liveLevel];
+    return playingLevel?.height ? `Auto (${playingLevel.height}p)` : 'Auto';
+  };
+
+  const changeSpeed = (value: number) => {
+    if (videoRef.current) videoRef.current.playbackRate = value;
+    setSpeed(value);
+  };
+
+  /* ---------- captions (own parser, own timing, Trebuchet MS) ---------- */
+  const trackKey = tracks.map(trackId).join('|');
+  const defaultTrack =
+    tracks.find((t) => t.default && /^en/i.test(t.srclang ?? '')) ??
+    tracks.find((t) => /^en(\b|-|_)/i.test(t.srclang ?? '') || /^english\b/i.test(t.label)) ??
+    tracks.find((t) => t.default) ??
+    tracks[0];
+  const firstId = defaultTrack ? trackId(defaultTrack) : null;
+  const [captionId, setCaptionId] = useState<string | null>(firstId);
+  const activeTrack = tracks.find((t) => trackId(t) === captionId);
+  useEffect(() => {
+    setCaptionId(firstId);
+  }, [firstId]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    for (const track of tracks) {
+      const id = trackId(track);
+      if (cueCache.current.has(id)) continue;
+      fetch(track.url, { signal: controller.signal })
+        .then((r) => {
+          if (!r.ok) throw new Error(String(r.status));
+          return r.arrayBuffer();
+        })
+        .then((buf) => {
+          cueCache.current.set(id, parseCaptions(decodeText(buf)).cues);
+          setCueVersion((v) => v + 1);
+        })
+        .catch((err: unknown) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return;
+          showNotice(`Couldn't load ${track.label} captions`, 'error');
+        });
+    }
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trackKey, showNotice]);
+
+  const activeCues = useMemo(() => {
+    if (!activeTrack) return [] as Cue[];
+    return cueCache.current.get(trackId(activeTrack)) ?? [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [captionId, trackKey, cueVersion]);
+
+  const syncCue = useCallback(() => {
     const v = videoRef.current;
-    if (!v || !v.videoWidth) return;
+    if (!v) return;
+    const text = activeText(cuesRef.current, v.currentTime - offsetRef.current);
+    setCueText((prev) => (prev === text ? prev : text));
+  }, []);
+  useEffect(() => {
+    cuesRef.current = activeCues;
+    syncCue();
+  }, [activeCues, syncCue]);
+  // check the cue on every frame while playing so captions are frame accurate
+  useEffect(() => {
+    if (!playing) return;
+    let frame = 0;
+    const tick = () => {
+      syncCue();
+      frame = requestAnimationFrame(tick);
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [playing, syncCue]);
+
+  useEffect(() => {
     try {
-      const c = document.createElement('canvas');
-      c.width = v.videoWidth;
-      c.height = v.videoHeight;
-      c.getContext('2d')?.drawImage(v, 0, 0);
-      c.toBlob((blob) => {
-        if (!blob) return say('Screenshot is not available');
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${title}-${fmt(v.currentTime).replace(/:/g, '-')}.png`;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-        say('Screenshot saved');
-      }, 'image/png');
+      const saved = JSON.parse(localStorage.getItem(CAPTION_PREFS_KEY) ?? 'null');
+      if (saved?.size in CAPTION_SIZES) setCaptionSize(saved.size);
+      if (saved?.style in CAPTION_STYLES) setCaptionStyle(saved.style);
     } catch {
-      say('Screenshot is not available');
+      /* defaults are fine */
+    }
+  }, []);
+  const savePrefs = (size: CaptionSize, style: CaptionStyle) => {
+    try {
+      localStorage.setItem(CAPTION_PREFS_KEY, JSON.stringify({ size, style }));
+    } catch {
+      /* storage blocked */
     }
   };
-  const pip = async () => {
-    const v = videoRef.current as any;
+  const toggleCaptions = () => setCaptionId(captionId ? null : firstId);
+
+  /* ---------- fullscreen / cast / screenshot / download ---------- */
+  const toggleFullscreen = useCallback(async () => {
+    if (!container) return;
     try {
-      if ((document as any).pictureInPictureElement) await (document as any).exitPictureInPicture();
-      else if (document.pictureInPictureEnabled) await v.requestPictureInPicture();
-      else if (v?.webkitSetPresentationMode) v.webkitSetPresentationMode('picture-in-picture');
-      else say('Picture in picture is not supported here');
+      if (document.fullscreenElement) {
+        await document.exitFullscreen();
+        unlockOrientation();
+      } else if (document.fullscreenEnabled) {
+        await container.requestFullscreen();
+        // rotate to landscape automatically (Android and other supporting browsers)
+        await lockOrientation(videoRef.current);
+      } else {
+        // iPhone Safari: the native player handles rotation itself
+        (videoRef.current as WebkitVideo | null)?.webkitEnterFullscreen?.();
+      }
     } catch {
-      say('Picture in picture is not available');
+      /* refused */
     }
-  };
-  const cast = async () => {
-    const v = videoRef.current as any;
+  }, [container]);
+
+  const castVideo = async () => {
+    const v = videoRef.current as CastVideo | null;
     if (!v) return;
     try {
       const device = await castMedia({
         url: new URL(src, window.location.href).href,
         contentType: isHls ? 'application/x-mpegURL' : 'video/mp4',
-        title,
+        title: title ?? 'Video',
         poster: poster ? new URL(poster, window.location.href).href : undefined,
         startTime: v.currentTime,
       });
       v.pause();
-      say(`Casting to ${device}`);
+      showNotice(`Casting to ${device}`);
       return;
     } catch (e) {
       if (e instanceof CastCancelled) return;
     }
     try {
       if (v.remote) await v.remote.prompt();
-      else say('Casting is not available in this browser');
+      else showNotice("Casting isn't available in this browser", 'error');
     } catch {
-      say('Could not start casting');
-    }
-  };
-  useEffect(() => {
-    void loadCastSdk();
-    return () => window.clearTimeout(noticeTimer.current);
-  }, []);
-  useEffect(() => {
-    if (playing && audioRef.current?.ctx.state === 'suspended') void audioRef.current.ctx.resume();
-  }, [playing]);
-
-  const pickSize = (s: SizeKey) => {
-    setSize(s);
-    try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ size: s, style: capStyle }));
-    } catch {
-      /* ignore */
+      showNotice("Couldn't start casting", 'error');
     }
   };
 
-  /* ----- seek bar ----- */
-  const seekFromEvent = (e: ReactPointerEvent<HTMLDivElement>) => {
+  const takeScreenshot = () => {
     const v = videoRef.current;
-    const r = e.currentTarget.getBoundingClientRect();
-    if (!v || !v.duration) return;
-    const p = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
-    v.currentTime = p * v.duration;
-    setTime(v.currentTime);
+    if (!v || !v.videoWidth) return;
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = v.videoWidth;
+      canvas.height = v.videoHeight;
+      canvas.getContext('2d')?.drawImage(v, 0, 0);
+      canvas.toBlob((blob) => {
+        if (!blob) {
+          showNotice("Screenshot isn't available for this video", 'error');
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${title ?? 'video'}-${formatTime(v.currentTime).replace(/:/g, '-')}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        showNotice('Screenshot saved');
+      }, 'image/png');
+    } catch {
+      showNotice("This video's host doesn't allow screenshots", 'error');
+    }
   };
 
-  /* ----- keyboard ----- */
-  useEffect(() => {
-    const root = rootRef.current;
-    if (!root) return;
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null;
-      if (t && /input|textarea|select/i.test(t.tagName)) return;
-      const inside = root.contains(document.activeElement) || document.fullscreenElement === root;
-      if (!inside && !root.matches(':hover')) return;
-      const k = e.key.toLowerCase();
-      if (k === ' ' || k === 'k') toggle();
-      else if (k === 'arrowleft' || k === 'j') seekBy(-10);
-      else if (k === 'arrowright' || k === 'l') seekBy(10);
-      else if (k === 'f') void toggleFull();
-      else if (k === 'm') toggleMute();
-      else if (k === 'c') setTrackUrl((u) => (u ? null : usable[0]?.url ?? null));
-      else return;
-      e.preventDefault();
-      wake();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [toggle, usable, wake]);
+  const downloadVideo = () => {
+    const a = document.createElement('a');
+    a.href = src;
+    a.download = title ?? 'video';
+    a.target = '_blank';
+    a.rel = 'noopener';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    showNotice('Download started');
+  };
 
-  /* ----- media events ----- */
-  const onTimeUpdate = () => {
+  /* ---------- controls visibility ---------- */
+  const revealControls = useCallback(() => {
+    setShowControls(true);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    hideTimer.current = setTimeout(() => {
+      if (videoRef.current && !videoRef.current.paused && !settingsOpenRef.current) setShowControls(false);
+    }, AUTO_HIDE_MS);
+  }, []);
+  const hideControls = useCallback(() => {
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setShowControls(false);
+  }, []);
+  const closeSettings = () => {
+    setSettingsOpen(false);
+    setMenuView('main');
+    revealControls();
+  };
+  const toggleSettings = () => {
+    if (settingsOpen) closeSettings();
+    else {
+      setMenuView('main');
+      setSettingsOpen(true);
+    }
+  };
+
+  useEffect(() => {
+    settingsOpenRef.current = settingsOpen;
+  }, [settingsOpen]);
+
+  // the video can finish loading metadata before React attaches, so catch up
+  useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
-    const t = v.currentTime;
-    if (!draggingRef.current) setTime(t);
-    if (v.buffered.length) {
-      let end = 0;
-      for (let i = 0; i < v.buffered.length; i++) {
-        if (v.buffered.start(i) <= t + 0.5) end = Math.max(end, v.buffered.end(i));
-      }
-      setBuffered(end);
+    if (v.error && !hlsRef.current) {
+      setError(true);
+      reportFail();
     }
-    if (autoSkip) {
-      if (inRange(t, intro)) v.currentTime = intro!.end;
-      else if (inRange(t, outro) && !autoNext) v.currentTime = outro!.end;
+    if (v.readyState >= 1) {
+      setDuration(v.duration);
+      updateBuffered(v);
     }
-    const now = Date.now();
-    if (now - lastReport.current > 4000 && v.duration > 0) {
-      lastReport.current = now;
-      onProgress(t, v.duration);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [src]);
+
+  // controls are always visible while paused; while playing they auto-hide
+  useEffect(() => {
+    if (playing) revealControls();
+    else {
+      setShowControls(true);
+      if (hideTimer.current) clearTimeout(hideTimer.current);
     }
+  }, [playing, revealControls]);
+
+  useEffect(
+    () => () => {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      if (flashTimer.current) clearTimeout(flashTimer.current);
+      if (noticeTimer.current) clearTimeout(noticeTimer.current);
+      if (skipToastTimer.current) clearTimeout(skipToastTimer.current);
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const chromium = 'chrome' in window && !/Firefox/i.test(navigator.userAgent);
+    setCastSupported(Boolean((videoRef.current as CastVideo | null)?.remote) || chromium);
+    if (chromium) void loadCastSdk();
+    const onChange = () => {
+      const active = Boolean(document.fullscreenElement);
+      setFullscreen(active);
+      if (!active) unlockOrientation();
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      unlockOrientation();
+    };
+  }, []);
+
+  /* ---------- gestures + keys ---------- */
+  // tapping the picture only shows or hides the controls; it never pauses
+  const onVideoClick = () => {
+    if (settingsOpen) {
+      closeSettings();
+      return;
+    }
+    if (!playing) return;
+    if (showControls) hideControls();
+    else revealControls();
   };
-  const onCanPlay = () => {
-    setWaiting(false);
-    onReady?.();
-    const v = videoRef.current;
-    if (v && !resumed.current) {
-      resumed.current = true;
-      if (startTime > 5) v.currentTime = startTime;
-      if (autoPlay) void v.play().catch(() => {});
+  // double tap: left third rewinds, right third skips, middle toggles fullscreen
+  const onVideoDoubleClick = (e: React.MouseEvent<HTMLVideoElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    if (ratio < 0.33) {
+      seekBy(-SEEK_STEP);
+      flashSeek('back');
+    } else if (ratio > 0.67) {
+      seekBy(SEEK_STEP);
+      flashSeek('forward');
+    } else void toggleFullscreen();
+  };
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    const target = e.target as HTMLElement;
+    if (target.closest('[role="slider"]')) return;
+    if (e.key === ' ' && target.closest('button')) return;
+    switch (e.key.toLowerCase()) {
+      case ' ':
+      case 'k':
+        e.preventDefault();
+        togglePlay();
+        break;
+      case 'arrowleft':
+      case 'j':
+        e.preventDefault();
+        seekBy(-SEEK_STEP);
+        flashSeek('back');
+        break;
+      case 'arrowright':
+      case 'l':
+        e.preventDefault();
+        seekBy(SEEK_STEP);
+        flashSeek('forward');
+        break;
+      case 'arrowup':
+        e.preventDefault();
+        changeVolume(Math.min(volume + 0.1, 1));
+        break;
+      case 'arrowdown':
+        e.preventDefault();
+        changeVolume(Math.max(volume - 0.1, 0));
+        break;
+      case 'm':
+        toggleMute();
+        break;
+      case 'f':
+        void toggleFullscreen();
+        break;
+      case 'c':
+        if (tracks.length > 0) toggleCaptions();
+        break;
+      case 'escape':
+        if (settingsOpen) {
+          e.preventDefault();
+          closeSettings();
+        }
+        break;
+      default:
+        return;
     }
+    revealControls();
   };
 
-  const levelLabel = (l: Level) => (l.height ? `${l.height}p` : `${Math.round(l.bitrate / 1000)} kbps`);
-  const liveHeight = liveLevel >= 0 ? hlsRef.current?.levels?.[liveLevel]?.height : 0;
+  const VolIcon = muted || volume === 0 ? MuteIcon : volume < 0.5 ? VolumeLowIcon : VolumeHighIcon;
+  const controlsHidden = !showControls && playing;
+  const bufferedPct = duration ? Math.min(100, (buffered / duration) * 100) : 0;
+  const buffering = loading && playing && !error;
   const useLevels = levels.length > 1;
-  const captionSize = Math.min(40, Math.max(13, (boxH / 100) * 5.2)) * SIZES[size];
+  const useSources = !useLevels && sourceQualities.length > 1;
 
-  const showIntroSkip = !autoSkip && inRange(time, intro);
-  const showOutroSkip = !autoSkip && inRange(time, outro);
-  const pct = duration ? (time / duration) * 100 : 0;
-  const bufPct = duration ? Math.min(100, (buffered / duration) * 100) : 0;
+  const captionStyleVars: CSSProperties = {
+    fontSize: `calc(clamp(0.85rem, 2.6cqw, 2.5rem) * ${CAPTION_SIZES[captionSize].scale})`,
+    fontFamily: CAPTION_FONT,
+  };
 
   return (
     <Root
-      ref={rootRef}
+      ref={setContainer}
       tabIndex={0}
-      $idle={!show && playing}
-      onMouseMove={wake}
-      onTouchStart={wake}
+      role='region'
+      aria-label={title ? `Video player: ${title}` : 'Video player'}
+      $hidden={controlsHidden}
+      onKeyDown={onKeyDown}
+      // only a real mouse reveals controls on hover (touch sends emulated mouse events after a tap)
+      onPointerMove={(e) => {
+        if (e.pointerType === 'mouse') revealControls();
+      }}
+      onPointerLeave={(e) => {
+        if (e.pointerType === 'mouse' && playing && !settingsOpen) hideControls();
+      }}
     >
       <video
+        key={src}
         ref={videoRef}
+        src={isHls ? undefined : src}
         poster={poster}
+        preload='metadata'
         playsInline
-        crossOrigin='anonymous'
-        onClick={() => {
-          if (panel) setPanel(false);
-          else if (!show) wake();
-          else toggle();
+        crossOrigin={cors ? 'anonymous' : undefined}
+        onClick={onVideoClick}
+        onDoubleClick={onVideoDoubleClick}
+        onLoadStart={() => {
+          endedRef.current = false;
+          setCurrentTime(0);
+          setDuration(0);
+          setBuffered(0);
+          setError(false);
+          setLoading(true);
         }}
-        onDoubleClick={(e) => {
-          const r = e.currentTarget.getBoundingClientRect();
-          const x = (e.clientX - r.left) / r.width;
-          if (x < 0.33) seekBy(-10);
-          else if (x > 0.67) seekBy(10);
-          else void toggleFull();
-        }}
+        onEmptied={() => setPlaying(false)}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
-        onWaiting={() => setWaiting(true)}
-        onPlaying={() => setWaiting(false)}
-        onCanPlay={onCanPlay}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration || 0)}
-        onDurationChange={(e) => setDuration(e.currentTarget.duration || 0)}
-        onTimeUpdate={onTimeUpdate}
-        onVolumeChange={(e) => setMuted(e.currentTarget.muted)}
-        onEnded={() => {
-          const v = videoRef.current;
-          if (v) onProgress(v.duration, v.duration);
-          setPlaying(false);
-          if (autoNext) onEnded();
+        onPlaying={() => {
+          startedRef.current = true;
+          setLoading(false);
+        }}
+        onWaiting={() => setLoading(true)}
+        onCanPlay={(e) => {
+          setLoading(false);
+          setError(false);
+          onReady?.();
+          const v = e.currentTarget;
+          // start by ourselves: a browser that blocks sound autoplay gets a muted start instead
+          if (autoPlayRef.current && !autoTriedRef.current && !startedRef.current && v.paused) {
+            autoTriedRef.current = true;
+            v.play().catch((err: unknown) => {
+              if ((err as DOMException)?.name !== 'NotAllowedError') return;
+              v.muted = true;
+              setMuted(true);
+              v.play()
+                .then(() => showNotice('Playing muted. Tap the volume button to unmute.'))
+                .catch(() => {
+                  v.muted = false;
+                  setMuted(false);
+                });
+            });
+          }
         }}
         onError={() => {
-          if (!isHls || !hlsRef.current) onError?.();
+          // hls.js reports and recovers from its own errors
+          if (hlsRef.current) return;
+          // a server without CORS headers rejects the request: retry once without CORS
+          if (cors && /^https?:/i.test(src) && !audioRef.current) {
+            setCors(false);
+            return;
+          }
+          setLoading(false);
+          setError(true);
+          reportFail();
+        }}
+        onEnded={fireEnded}
+        onLoadedMetadata={(e) => {
+          const v = e.currentTarget;
+          setDuration(v.duration);
+          // resume once per source (a server switch keeps the spot the viewer was at)
+          const from = startAtRef.current;
+          if (from && from > 3 && Number.isFinite(v.duration) && from < v.duration - 15 && resumedRef.current !== src) {
+            v.currentTime = from;
+          }
+          resumedRef.current = src;
+          v.playbackRate = speed;
+          updateBuffered(v);
+        }}
+        onDurationChange={(e) => setDuration(e.currentTarget.duration)}
+        onProgress={(e) => updateBuffered(e.currentTarget)}
+        onSeeked={syncCue}
+        onTimeUpdate={(e) => {
+          const v = e.currentTarget;
+          if (!scrubbing) setCurrentTime(v.currentTime);
+          updateBuffered(v);
+          checkSkip(v);
+          if (
+            Number.isFinite(v.duration) &&
+            v.duration > 0 &&
+            v.currentTime > 5 &&
+            Math.abs(v.currentTime - lastReportRef.current) >= 4
+          ) {
+            lastReportRef.current = v.currentTime;
+            onProgressRef.current(v.currentTime, v.duration);
+          }
+          // some streams never fire "ended": treat the last quarter second as the end
+          if (Number.isFinite(v.duration) && v.duration > 1 && v.currentTime >= v.duration - 0.25) {
+            onProgressRef.current(v.duration, v.duration);
+            fireEnded();
+          }
         }}
       />
 
-      {captionText && (
-        <Caption $lift={show} $size={captionSize} $box={capStyle === 'box'}>
-          <span>{captionText}</span>
-        </Caption>
+      <Dim $on={!controlsHidden} />
+
+      {(skipTarget || skipToast) && (
+        <Skips>
+          {skipToast && (
+            <div className='toast' role='status'>
+              <span>{skipToast.kind === 'intro' ? 'Intro skipped' : 'Outro skipped'}</span>
+              <button type='button' onClick={undoSkip}>
+                Undo
+              </button>
+            </div>
+          )}
+          {skipTarget && !skipToast && (
+            <button type='button' onClick={() => skipTo(skipTarget, false)}>
+              <span style={{ position: 'relative' }}>{skipTarget === 'intro' ? 'Skip Intro' : 'Skip Outro'}</span>
+              <SeekForward10Icon />
+            </button>
+          )}
+        </Skips>
       )}
 
-      {notice && <Notice>{notice}</Notice>}
-
-      {waiting && <Spinner />}
-
-      <Center
-        $show={!playing && !waiting}
-        onClick={toggle}
-        aria-label='Play'
-      >
-        <FiPlay />
-      </Center>
-
-      {showIntroSkip && (
-        <SkipPill onClick={() => videoRef.current && (videoRef.current.currentTime = intro!.end)}>
-          <FaForward /> Skip Intro
-        </SkipPill>
+      {cueText && (
+        <CaptionBox>
+          <p style={captionStyleVars}>
+            <span className={captionStyle === 'box' ? 'box' : 'outline'}>{cueText}</span>
+          </p>
+        </CaptionBox>
       )}
-      {showOutroSkip && (
-        <SkipPill
-          onClick={() => {
-            if (autoNext) onNext();
-            else if (videoRef.current) videoRef.current.currentTime = outro!.end;
-          }}
+
+      {flash && (
+        <Flash key={flash.key} $dir={flash.dir}>
+          <div>{flash.dir === 'back' ? <SeekBackward10Icon /> : <SeekForward10Icon />}</div>
+        </Flash>
+      )}
+
+      {buffering && controlsHidden && (
+        <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', pointerEvents: 'none' }}>
+          <Spin style={{ borderColor: 'rgba(255,255,255,.3)', borderTopColor: '#fff' }} />
+        </div>
+      )}
+
+      {error && (
+        <Fill>
+          <div className='in'>
+            <InfoIcon />
+            <p>This video couldn&apos;t be played</p>
+            <small>This server didn&apos;t load. Another one is tried automatically when available.</small>
+          </div>
+        </Fill>
+      )}
+
+      {notice && (
+        <NoticeBox role='status' aria-live='polite' $error={notice.tone === 'error'}>
+          {notice.text}
+        </NoticeBox>
+      )}
+
+      {/* top: volume + cast on the left, tools on the right */}
+      <TopBar $off={controlsHidden} $from='top'>
+        <Pill>
+          <VolWrap>
+            <Btn type='button' aria-label={muted ? 'Unmute (m)' : 'Mute (m)'} title='Mute (m)' onClick={toggleMute}>
+              <VolIcon />
+            </Btn>
+            <div className='slot'>
+              <div>
+                <Slider
+                  label='Volume'
+                  value={muted ? 0 : volume}
+                  max={1}
+                  step={0.02}
+                  onChange={(v) => changeVolume(v)}
+                />
+              </div>
+            </div>
+          </VolWrap>
+          {castSupported && (
+            <Btn type='button' aria-label='Cast' title='Cast' onClick={() => void castVideo()}>
+              <ChromecastIcon />
+            </Btn>
+          )}
+        </Pill>
+
+        <Pill>
+          <Btn type='button' aria-label='Screenshot' title='Screenshot' onClick={takeScreenshot}>
+            <CameraIcon />
+          </Btn>
+          {!isHls && (
+            <Btn type='button' aria-label='Download' title='Download' onClick={downloadVideo}>
+              <DownloadIcon />
+            </Btn>
+          )}
+          {tracks.length > 0 && (
+            <Btn
+              type='button'
+              aria-label={captionId ? 'Hide captions (c)' : 'Show captions (c)'}
+              title='Captions (c)'
+              onClick={toggleCaptions}
+            >
+              {captionId ? <ClosedCaptionsOnIcon /> : <ClosedCaptionsIcon />}
+            </Btn>
+          )}
+          <GearBtn type='button' aria-label='Settings' title='Settings' $open={settingsOpen} onClick={toggleSettings}>
+            <SettingsIcon />
+          </GearBtn>
+        </Pill>
+      </TopBar>
+
+      {/* centre: back 10 / play / forward 10 */}
+      <CenterLayer $off={controlsHidden || error}>
+        <Round
+          type='button'
+          aria-label='Back 10 seconds'
+          $size='clamp(2.2rem, 5.7cqw, 3.8rem)'
+          $left='25%'
+          onClick={() => seekBy(-SEEK_STEP)}
         >
-          <FaForward /> {autoNext ? 'Next Episode' : 'Skip Outro'}
-        </SkipPill>
-      )}
+          <SeekBackward10Icon />
+        </Round>
+        <Round
+          type='button'
+          aria-label={playing ? 'Pause video' : 'Play video'}
+          $size='clamp(2.6rem, 6.3cqw, 4.2rem)'
+          $left='50%'
+          onClick={togglePlay}
+        >
+          {buffering ? <Spin /> : playing ? <PauseIcon /> : <PlayIcon />}
+        </Round>
+        <Round
+          type='button'
+          aria-label='Forward 10 seconds'
+          $size='clamp(2.2rem, 5.7cqw, 3.8rem)'
+          $left='75%'
+          onClick={() => seekBy(SEEK_STEP)}
+        >
+          <SeekForward10Icon />
+        </Round>
+      </CenterLayer>
 
-      {panel && show && (
-        <Panel onClick={(e) => e.stopPropagation()}>
-          <h4>Quality</h4>
-          <div className='chips'>
-            {useLevels ? (
+      {/* bottom: time + fullscreen above the progress bar */}
+      <BottomBar $off={controlsHidden} $from='bottom'>
+        <InfoRow>
+          <TimePill>
+            <span>
+              {formatTime(currentTime)}
+              <em> / {formatTime(duration)}</em>
+              {title && <em className='ttl'> • {title}</em>}
+            </span>
+          </TimePill>
+          <FsBtn
+            type='button'
+            aria-label={fullscreen ? 'Exit fullscreen (f)' : 'Fullscreen (f)'}
+            title='Fullscreen (f)'
+            onClick={() => void toggleFullscreen()}
+          >
+            {fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
+          </FsBtn>
+        </InfoRow>
+        <SeekWrap>
+          <Slider
+            label='Seek'
+            value={currentTime}
+            max={duration || 100}
+            step={0.1}
+            buffered={bufferedPct}
+            onChange={(v) => {
+              setScrubbing(true);
+              setCurrentTime(v);
+            }}
+            onCommit={(v) => {
+              if (videoRef.current) videoRef.current.currentTime = v;
+              setScrubbing(false);
+            }}
+          />
+        </SeekWrap>
+      </BottomBar>
+
+      {/* settings menu */}
+      {settingsOpen && (
+        <MenuWrap>
+          <div className='sheet'>
+            {menuView === 'main' && (
               <>
-                <button className={level === -1 ? 'on' : ''} onClick={() => pickLevel(-1)}>
-                  Auto{level === -1 && liveHeight ? ` ${liveHeight}p` : ''}
-                </button>
-                {levels.map((l) => (
-                  <button key={l.index} className={level === l.index ? 'on' : ''} onClick={() => pickLevel(l.index)}>
-                    {levelLabel(l)}
-                  </button>
-                ))}
+                {useLevels && (
+                  <Row icon={<SettingsIcon />} label='Quality' value={qualityValue()} onClick={() => setMenuView('quality')} />
+                )}
+                {useSources && (
+                  <Row
+                    icon={<SettingsIcon />}
+                    label='Quality'
+                    value={sourceQuality === 'auto' ? 'Auto' : sourceQuality}
+                    onClick={() => setMenuView('source')}
+                  />
+                )}
+                <Row
+                  icon={<VolumeHighIcon />}
+                  label='Volume boost'
+                  value={cors ? boostLabel(boost) : 'Unavailable'}
+                  onClick={() => setMenuView('boost')}
+                />
+                {tracks.length > 0 && (
+                  <Row
+                    icon={<ClosedCaptionsIcon />}
+                    label='Captions'
+                    value={activeTrack?.label ?? 'Off'}
+                    onClick={() => setMenuView('captions')}
+                  />
+                )}
+                {tracks.length > 0 && (
+                  <Row
+                    icon={<ClosedCaptionsOnIcon />}
+                    label='Caption style'
+                    value={CAPTION_SIZES[captionSize].label}
+                    onClick={() => setMenuView('style')}
+                  />
+                )}
+                <Row
+                  icon={<PlaybackSpeedCircleIcon />}
+                  label='Speed'
+                  value={speed === 1 ? 'Normal' : `${speed}x`}
+                  onClick={() => setMenuView('speed')}
+                />
+                {autoplayOption && (
+                  <Row
+                    icon={<PlayIcon />}
+                    label='Autoplay'
+                    value={autoplayOption.value ? 'On' : 'Off'}
+                    chevron={false}
+                    onClick={() => autoplayOption.onChange(!autoplayOption.value)}
+                  />
+                )}
+                {autoSkipOption && (
+                  <Row
+                    icon={<SeekForward10Icon />}
+                    label='Auto skip intro/outro'
+                    value={!intro && !outro ? 'No data' : autoSkipOption.value ? 'On' : 'Off'}
+                    chevron={false}
+                    onClick={() => autoSkipOption.onChange(!autoSkipOption.value)}
+                  />
+                )}
+                {autoNextOption && (
+                  <Row
+                    icon={<SeekForward10Icon />}
+                    label='Auto next episode'
+                    value={autoNextOption.value ? 'On' : 'Off'}
+                    chevron={false}
+                    onClick={() => autoNextOption.onChange(!autoNextOption.value)}
+                  />
+                )}
               </>
-            ) : sourceQualities.length > 1 ? (
-              ['auto', ...sourceQualities].map((q) => (
-                <button key={q} className={sourceQuality === q ? 'on' : ''} onClick={() => onSourceQuality?.(q)}>
-                  {q === 'auto' ? 'Auto' : q}
-                </button>
-              ))
-            ) : (
-              <button className='on'>
-                <FiCheck /> Auto
+            )}
+
+            {menuView !== 'main' && (
+              <button type='button' className='row' style={{ fontWeight: 800 }} onClick={() => setMenuView('main')}>
+                <ChevronLeftIcon />
+                {MENU_TITLES[menuView]}
               </button>
             )}
-          </div>
 
-          <h4>Volume</h4>
-          <Slide
-            type='range'
-            min={0}
-            max={1}
-            step={0.02}
-            value={muted ? 0 : volume}
-            onChange={(e) => changeVolume(Number(e.target.value))}
-            aria-label='Volume'
-          />
-          <div className='chips'>
-            {[1, 2, 3, 4].map((b) => (
-              <button key={b} className={boost === b ? 'on' : ''} onClick={() => changeBoost(b)}>
-                {b === 1 ? 'No boost' : `+${(b - 1) * 100}%`}
-              </button>
-            ))}
-          </div>
-
-          <h4>Speed</h4>
-          <div className='chips'>
-            {SPEEDS.map((s) => (
-              <button key={s} className={speed === s ? 'on' : ''} onClick={() => pickSpeed(s)}>
-                {s === 1 ? 'Normal' : `${s}×`}
-              </button>
-            ))}
-          </div>
-
-          {usable.length > 0 && (
-            <>
-              <h4>Captions</h4>
-              <div className='chips'>
-                <button className={!trackUrl ? 'on' : ''} onClick={() => setTrackUrl(null)}>
-                  Off
-                </button>
-                {usable.map((t, i) => (
-                  <button key={t.url} className={trackUrl === t.url ? 'on' : ''} onClick={() => setTrackUrl(t.url)}>
-                    {t.label || `Track ${i + 1}`}
-                  </button>
+            {menuView === 'captions' && (
+              <>
+                <Opt label='Off' selected={captionId === null} onClick={() => setCaptionId(null)} />
+                {tracks.map((t) => (
+                  <Opt
+                    key={trackId(t)}
+                    label={t.label}
+                    selected={captionId === trackId(t)}
+                    onClick={() => setCaptionId(trackId(t))}
+                  />
                 ))}
-              </div>
-              <h4>Caption style</h4>
-              <div className='chips'>
-                <button className={capStyle === 'outline' ? 'on' : ''} onClick={() => pickStyle('outline')}>
-                  Outline
-                </button>
-                <button className={capStyle === 'box' ? 'on' : ''} onClick={() => pickStyle('box')}>
-                  Dark box
-                </button>
-              </div>
-              <h4>Caption size</h4>
-              <div className='chips'>
-                {(Object.keys(SIZES) as SizeKey[]).map((k) => (
-                  <button key={k} className={size === k ? 'on' : ''} onClick={() => pickSize(k)}>
-                    {k}
-                  </button>
+              </>
+            )}
+
+            {menuView === 'style' && (
+              <>
+                <p className='cap'>Size</p>
+                {(Object.keys(CAPTION_SIZES) as CaptionSize[]).map((key) => (
+                  <Opt
+                    key={key}
+                    label={CAPTION_SIZES[key].label}
+                    selected={captionSize === key}
+                    onClick={() => {
+                      setCaptionSize(key);
+                      savePrefs(key, captionStyle);
+                    }}
+                  />
                 ))}
-              </div>
-              <h4>Caption timing {offset ? `(${offset > 0 ? '+' : ''}${offset.toFixed(1)}s)` : ''}</h4>
-              <div className='chips'>
-                <button onClick={() => setOffset((o) => Math.round((o - 0.5) * 10) / 10)}>−0.5s</button>
-                <button onClick={() => setOffset(0)}>Reset</button>
-                <button onClick={() => setOffset((o) => Math.round((o + 0.5) * 10) / 10)}>+0.5s</button>
-              </div>
-            </>
-          )}
-          <h4>Tools</h4>
-          <div className='chips'>
-            <button onClick={screenshot}>
-              <FiCamera /> Screenshot
-            </button>
-            <button onClick={pip}>
-              <MdPictureInPictureAlt /> PiP
-            </button>
-            <button onClick={cast}>
-              <FiCast /> Cast
-            </button>
-          </div>
-        </Panel>
-      )}
+                <p className='cap'>Background</p>
+                {(Object.keys(CAPTION_STYLES) as CaptionStyle[]).map((key) => (
+                  <Opt
+                    key={key}
+                    label={CAPTION_STYLES[key]}
+                    selected={captionStyle === key}
+                    onClick={() => {
+                      setCaptionStyle(key);
+                      savePrefs(captionSize, key);
+                    }}
+                  />
+                ))}
+              </>
+            )}
 
-      <Chrome $show={show} onClick={(e) => e.target === e.currentTarget && (panel ? setPanel(false) : toggle())}>
-        <TitlePill>{title}</TitlePill>
-
-        <Bottom>
-          <BarPill>
-            <span>{fmt(time)}</span>
-            <Track
-              onPointerDown={(e) => {
-                draggingRef.current = true;
-                e.currentTarget.setPointerCapture(e.pointerId);
-                seekFromEvent(e);
-              }}
-              onPointerMove={(e) => draggingRef.current && seekFromEvent(e)}
-              onPointerUp={() => {
-                draggingRef.current = false;
-                wake();
-              }}
-              onPointerCancel={() => (draggingRef.current = false)}
-            >
-              <Rail>
-                <i className='buf' style={{ width: `${bufPct}%` }} />
-                <i className='fill' style={{ width: `${pct}%` }} />
-                <span className='knob' style={{ left: `${pct}%`, minWidth: 0 }} />
-              </Rail>
-            </Track>
-            <span>{fmt(duration)}</span>
-          </BarPill>
-
-          <Row>
-            <Pill>
-              <IconBtn onClick={() => seekBy(-10)} aria-label='Back 10 seconds'>
-                <FiRotateCcw />
-                <small>10</small>
-              </IconBtn>
-              <IconBtn onClick={toggle} aria-label={playing ? 'Pause' : 'Play'}>
-                {playing ? <FiPause /> : <FiPlay />}
-              </IconBtn>
-              <IconBtn onClick={() => seekBy(10)} aria-label='Forward 10 seconds'>
-                <FiRotateCw />
-                <small>10</small>
-              </IconBtn>
-            </Pill>
-
-            <Row style={{ justifyContent: 'flex-end' }}>
-              <Pill>
-                {usable.length > 0 && (
-                  <IconBtn
-                    $on={!!trackUrl}
-                    onClick={() => setTrackUrl(trackUrl ? null : usable[0].url)}
-                    aria-label='Captions'
-                  >
-                    {trackUrl ? <MdClosedCaption /> : <MdClosedCaptionOff />}
-                  </IconBtn>
+            {menuView === 'boost' && (
+              <>
+                {cors ? (
+                  BOOSTS.map((b) => (
+                    <Opt key={b} label={boostLabel(b)} selected={boost === b} onClick={() => changeBoost(b)} />
+                  ))
+                ) : (
+                  <p className='hint'>This video&apos;s server doesn&apos;t allow volume boost.</p>
                 )}
-                <IconBtn onClick={toggleMute} aria-label='Mute'>
-                  {muted ? <FiVolumeX /> : <FiVolume2 />}
-                </IconBtn>
-                <IconBtn onClick={toggleFull} aria-label='Fullscreen'>
-                  {full ? <FiMinimize /> : <FiMaximize />}
-                </IconBtn>
-              </Pill>
-              <Circle onClick={() => setPanel((v) => !v)} aria-label='Settings'>
-                <FiSettings />
-              </Circle>
-            </Row>
-          </Row>
-        </Bottom>
-      </Chrome>
+                {cors && <p className='hint'>Raises the sound above 100%. Lower your device volume if it gets too loud.</p>}
+              </>
+            )}
+
+            {menuView === 'quality' && (
+              <>
+                <Opt label='Auto' selected={quality === -1} onClick={() => changeQuality(-1)} />
+                {levels.map((l) => (
+                  <Opt
+                    key={l.index}
+                    label={levelLabel(l)}
+                    selected={quality === l.index}
+                    onClick={() => changeQuality(l.index)}
+                  />
+                ))}
+                <p className='hint'>Auto picks the best quality your connection can handle.</p>
+              </>
+            )}
+
+            {menuView === 'source' &&
+              ['auto', ...sourceQualities].map((q) => (
+                <Opt
+                  key={q}
+                  label={q === 'auto' ? 'Auto' : q}
+                  selected={sourceQuality === q}
+                  onClick={() => onSourceQuality?.(q)}
+                />
+              ))}
+
+            {menuView === 'speed' &&
+              SPEEDS.map((s) => (
+                <Opt key={s} label={s === 1 ? 'Normal' : `${s}x`} selected={speed === s} onClick={() => changeSpeed(s)} />
+              ))}
+          </div>
+        </MenuWrap>
+      )}
     </Root>
   );
 }

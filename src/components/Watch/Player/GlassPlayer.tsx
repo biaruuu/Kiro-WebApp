@@ -12,9 +12,12 @@ import {
   FiSettings,
   FiVolume2,
   FiVolumeX,
+  FiCamera,
+  FiCast,
 } from 'react-icons/fi';
 import { FaForward } from 'react-icons/fa';
-import { MdClosedCaption, MdClosedCaptionOff } from 'react-icons/md';
+import { MdClosedCaption, MdClosedCaptionOff, MdPictureInPictureAlt } from 'react-icons/md';
+import { castMedia, CastCancelled, loadCastSdk } from '../../../lib/cast';
 import { activeText, decodeText, isThumbnailTrack, parseCaptions, type Cue } from '../../../lib/captions';
 
 export type GlassTrack = { url: string; label: string; srclang?: string; default?: boolean };
@@ -331,7 +334,7 @@ const SkipPill = styled.button`
 `;
 
 /* Crunchyroll-style captions: bold white Trebuchet MS with a heavy black outline. */
-const Caption = styled.div<{ $lift: boolean; $size: number }>`
+const Caption = styled.div<{ $lift: boolean; $size: number; $box: boolean }>`
   position: absolute;
   z-index: 2;
   left: 4%;
@@ -355,6 +358,42 @@ const Caption = styled.div<{ $lift: boolean; $size: number }>`
     -0.06em -0.06em 0 #000,
     0 0.08em 0.14em rgba(0, 0, 0, 0.85);
   white-space: pre-line;
+  ${(p) =>
+    p.$box &&
+    css`
+      -webkit-text-stroke: 0;
+      text-shadow: none;
+      span {
+        display: inline;
+        padding: 0.08em 0.4em;
+        border-radius: 0.3em;
+        background: rgba(0, 0, 0, 0.75);
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+      }
+    `}
+`;
+
+const Notice = styled.div`
+  ${glass}
+  position: absolute;
+  z-index: 8;
+  top: 0.8rem;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0.4rem 0.95rem;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+`;
+
+const Slide = styled.input`
+  position: relative;
+  width: 100%;
+  accent-color: #17171a;
+  height: 1.3rem;
 `;
 
 const Panel = styled.div`
@@ -458,6 +497,12 @@ export default function GlassPlayer({
   const [trackUrl, setTrackUrl] = useState<string | null>(null);
   const [size, setSize] = useState<SizeKey>('M');
   const [offset, setOffset] = useState(0);
+  const [volume, setVolume] = useState(1);
+  const [boost, setBoost] = useState(1);
+  const [capStyle, setCapStyle] = useState<'outline' | 'box'>('outline');
+  const [notice, setNotice] = useState('');
+  const audioRef = useRef<{ ctx: AudioContext; gain: GainNode } | null>(null);
+  const noticeTimer = useRef<number | undefined>(undefined);
 
   const isHls = type === 'hls';
 
@@ -466,6 +511,7 @@ export default function GlassPlayer({
     try {
       const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
       if (p.size in SIZES) setSize(p.size as SizeKey);
+      if (p.style === 'box' || p.style === 'outline') setCapStyle(p.style);
     } catch {
       /* ignore */
     }
@@ -634,6 +680,7 @@ export default function GlassPlayer({
     const v = videoRef.current;
     if (!v) return;
     v.muted = !v.muted;
+    if (!v.muted && v.volume === 0) changeVolume(1);
     setMuted(v.muted);
   };
   const toggleFull = async () => {
@@ -670,10 +717,127 @@ export default function GlassPlayer({
     if (videoRef.current) videoRef.current.playbackRate = s;
     setSpeed(s);
   };
+  const say = (text: string) => {
+    setNotice(text);
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(''), 2600);
+  };
+  const pickStyle = (st: 'outline' | 'box') => {
+    setCapStyle(st);
+    try {
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ size, style: st }));
+    } catch {
+      /* ignore */
+    }
+  };
+  const changeVolume = (value: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.volume = value;
+    v.muted = value === 0;
+    setVolume(value);
+    setMuted(value === 0);
+  };
+  // Volume boost: audio goes through a Web Audio gain node (needs CORS-readable media).
+  const changeBoost = (value: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    try {
+      if (!audioRef.current) {
+        if (value === 1) return setBoost(1);
+        const Ctx = window.AudioContext ?? (window as any).webkitAudioContext;
+        if (!Ctx) return say('Volume boost is not supported here');
+        const ctx: AudioContext = new Ctx();
+        const source = ctx.createMediaElementSource(v);
+        const gain = ctx.createGain();
+        const limiter = ctx.createDynamicsCompressor();
+        limiter.threshold.value = -2;
+        limiter.knee.value = 2;
+        limiter.ratio.value = 20;
+        limiter.attack.value = 0.002;
+        limiter.release.value = 0.12;
+        source.connect(gain).connect(limiter).connect(ctx.destination);
+        audioRef.current = { ctx, gain };
+      }
+      audioRef.current.gain.gain.value = value;
+      if (audioRef.current.ctx.state === 'suspended') void audioRef.current.ctx.resume();
+      setBoost(value);
+    } catch {
+      setBoost(1);
+      say('Volume boost is not available for this video');
+    }
+  };
+  const screenshot = () => {
+    const v = videoRef.current;
+    if (!v || !v.videoWidth) return;
+    try {
+      const c = document.createElement('canvas');
+      c.width = v.videoWidth;
+      c.height = v.videoHeight;
+      c.getContext('2d')?.drawImage(v, 0, 0);
+      c.toBlob((blob) => {
+        if (!blob) return say('Screenshot is not available');
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${title}-${fmt(v.currentTime).replace(/:/g, '-')}.png`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        say('Screenshot saved');
+      }, 'image/png');
+    } catch {
+      say('Screenshot is not available');
+    }
+  };
+  const pip = async () => {
+    const v = videoRef.current as any;
+    try {
+      if ((document as any).pictureInPictureElement) await (document as any).exitPictureInPicture();
+      else if (document.pictureInPictureEnabled) await v.requestPictureInPicture();
+      else if (v?.webkitSetPresentationMode) v.webkitSetPresentationMode('picture-in-picture');
+      else say('Picture in picture is not supported here');
+    } catch {
+      say('Picture in picture is not available');
+    }
+  };
+  const cast = async () => {
+    const v = videoRef.current as any;
+    if (!v) return;
+    try {
+      const device = await castMedia({
+        url: new URL(src, window.location.href).href,
+        contentType: isHls ? 'application/x-mpegURL' : 'video/mp4',
+        title,
+        poster: poster ? new URL(poster, window.location.href).href : undefined,
+        startTime: v.currentTime,
+      });
+      v.pause();
+      say(`Casting to ${device}`);
+      return;
+    } catch (e) {
+      if (e instanceof CastCancelled) return;
+    }
+    try {
+      if (v.remote) await v.remote.prompt();
+      else say('Casting is not available in this browser');
+    } catch {
+      say('Could not start casting');
+    }
+  };
+  useEffect(() => {
+    void loadCastSdk();
+    return () => window.clearTimeout(noticeTimer.current);
+  }, []);
+  useEffect(() => {
+    if (playing && audioRef.current?.ctx.state === 'suspended') void audioRef.current.ctx.resume();
+  }, [playing]);
+
   const pickSize = (s: SizeKey) => {
     setSize(s);
     try {
-      localStorage.setItem(PREFS_KEY, JSON.stringify({ size: s }));
+      localStorage.setItem(PREFS_KEY, JSON.stringify({ size: s, style: capStyle }));
     } catch {
       /* ignore */
     }
@@ -776,7 +940,13 @@ export default function GlassPlayer({
           else if (!show) wake();
           else toggle();
         }}
-        onDoubleClick={toggleFull}
+        onDoubleClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect();
+          const x = (e.clientX - r.left) / r.width;
+          if (x < 0.33) seekBy(-10);
+          else if (x > 0.67) seekBy(10);
+          else void toggleFull();
+        }}
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onWaiting={() => setWaiting(true)}
@@ -798,10 +968,12 @@ export default function GlassPlayer({
       />
 
       {captionText && (
-        <Caption $lift={show} $size={captionSize}>
-          {captionText}
+        <Caption $lift={show} $size={captionSize} $box={capStyle === 'box'}>
+          <span>{captionText}</span>
         </Caption>
       )}
+
+      {notice && <Notice>{notice}</Notice>}
 
       {waiting && <Spinner />}
 
@@ -857,6 +1029,24 @@ export default function GlassPlayer({
             )}
           </div>
 
+          <h4>Volume</h4>
+          <Slide
+            type='range'
+            min={0}
+            max={1}
+            step={0.02}
+            value={muted ? 0 : volume}
+            onChange={(e) => changeVolume(Number(e.target.value))}
+            aria-label='Volume'
+          />
+          <div className='chips'>
+            {[1, 2, 3, 4].map((b) => (
+              <button key={b} className={boost === b ? 'on' : ''} onClick={() => changeBoost(b)}>
+                {b === 1 ? 'No boost' : `+${(b - 1) * 100}%`}
+              </button>
+            ))}
+          </div>
+
           <h4>Speed</h4>
           <div className='chips'>
             {SPEEDS.map((s) => (
@@ -879,6 +1069,15 @@ export default function GlassPlayer({
                   </button>
                 ))}
               </div>
+              <h4>Caption style</h4>
+              <div className='chips'>
+                <button className={capStyle === 'outline' ? 'on' : ''} onClick={() => pickStyle('outline')}>
+                  Outline
+                </button>
+                <button className={capStyle === 'box' ? 'on' : ''} onClick={() => pickStyle('box')}>
+                  Dark box
+                </button>
+              </div>
               <h4>Caption size</h4>
               <div className='chips'>
                 {(Object.keys(SIZES) as SizeKey[]).map((k) => (
@@ -895,6 +1094,18 @@ export default function GlassPlayer({
               </div>
             </>
           )}
+          <h4>Tools</h4>
+          <div className='chips'>
+            <button onClick={screenshot}>
+              <FiCamera /> Screenshot
+            </button>
+            <button onClick={pip}>
+              <MdPictureInPictureAlt /> PiP
+            </button>
+            <button onClick={cast}>
+              <FiCast /> Cast
+            </button>
+          </div>
         </Panel>
       )}
 

@@ -165,7 +165,7 @@ const Root = styled.div<{ $hidden: boolean }>`
   user-select: none;
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
-  font-family: 'Trebuchet MS', system-ui, sans-serif;
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
   ${(p) => p.$hidden && 'cursor: none;'}
 
   video {
@@ -569,12 +569,17 @@ const Skips = styled.div`
   }
 `;
 
-const CaptionBox = styled.div`
+const CaptionBox = styled.div<{ $lift: boolean }>`
   position: absolute;
   z-index: 15;
   left: 0;
   right: 0;
-  bottom: clamp(0.6rem, 2.6cqw, 2.4rem);
+  /* controls hidden: right at the bottom. controls showing: just above the time row,
+     so the text never sits on the progress bar. */
+  bottom: ${(p) =>
+    p.$lift
+      ? `calc(clamp(0.8rem, 3cqw, 2.25rem) + clamp(0.25rem, 1cqw, 0.75rem) + ${PILL_H} + 1.25rem + 0.5rem)`
+      : 'clamp(0.6rem, 2.6cqw, 2.4rem)'};
   transition: bottom 0.25s ease;
   display: flex;
   justify-content: center;
@@ -1643,7 +1648,7 @@ export default function GlassPlayer({
       )}
 
       {cueText && (
-        <CaptionBox>
+        <CaptionBox $lift={!controlsHidden}>
           <p style={captionStyleVars}>
             <span className={captionStyle === 'box' ? 'box' : 'outline'}>{cueText}</span>
           </p>

@@ -50,3 +50,60 @@
 .vds-poster {
   object-fit: cover;
 }
+
+/* ---------------------------------------------------------------------------
+   Captions: Crunchyroll-style — Trebuchet MS, bold white text, solid black
+   outline, no backdrop box.
+--------------------------------------------------------------------------- */
+@font-face {
+  font-family: 'Trebuchet MS';
+  src: url('/fonts/trebuc.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'Trebuchet MS';
+  src: url('/fonts/trebuc-italic.ttf') format('truetype');
+  font-weight: 400;
+  font-style: italic;
+  font-display: swap;
+}
+
+.player .vds-captions {
+  --cue-color: #fff;
+  --cue-bg-color: transparent;
+  --cue-backdrop: none;
+  --cue-font-size: clamp(15px, calc(var(--overlay-height, 100%) / 100 * 5.4), 40px);
+  --cue-line-height: 1.22;
+  --cue-padding-x: 0;
+  --cue-padding-y: 0;
+  font-family: 'Trebuchet MS', 'Lucida Grande', Tahoma, Verdana, sans-serif;
+}
+
+.player .vds-captions [data-part='cue'],
+.player .vds-captions [data-part='cue-display'] {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  color: #fff;
+  font-family: 'Trebuchet MS', 'Lucida Grande', Tahoma, Verdana, sans-serif !important;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  paint-order: stroke fill;
+  -webkit-text-stroke: 0.14em #000;
+  text-shadow:
+    -0.07em -0.07em 0 #000,
+    0.07em -0.07em 0 #000,
+    -0.07em 0.07em 0 #000,
+    0.07em 0.07em 0 #000,
+    0 0.09em 0 #000,
+    0 -0.09em 0 #000,
+    0.09em 0 0 #000,
+    -0.09em 0 0 #000,
+    0 0.05em 0.18em rgba(0, 0, 0, 0.7);
+}
+
+.player .vds-captions [data-part='cue'] i,
+.player .vds-captions [data-part='cue'] em {
+  font-style: italic;
+}

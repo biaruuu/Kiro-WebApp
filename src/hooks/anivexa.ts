@@ -165,14 +165,16 @@ export async function fetchWatch(episodeId: string): Promise<WatchData> {
 
 /** Playable servers in the order they should be tried: native video first, embeds last. */
 export function orderStreams(streams: StreamSource[]): StreamSource[] {
-  const rank = (s: StreamSource) => (s.type === 'embed' ? 1 : 0);
+  const rank = (s: StreamSource) => (s.type === 'embed' ? 2 : s.type === 'hls' ? 0 : 1);
+  const height = (s: StreamSource) => parseInt(String(s.quality ?? ''), 10) || 0;
   return [...streams]
     .filter((s) => !!s.url)
     .sort(
       (a, b) =>
         rank(a) - rank(b) ||
         Number(!!b.isActive) - Number(!!a.isActive) ||
-        (b.priority ?? 0) - (a.priority ?? 0),
+        (b.priority ?? 0) - (a.priority ?? 0) ||
+        height(b) - height(a),
     );
 }
 

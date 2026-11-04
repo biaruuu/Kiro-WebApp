@@ -14,7 +14,8 @@ import {
   DefaultVideoLayout,
   defaultLayoutIcons,
 } from '@vidstack/react/player/layouts/default';
-import { FaForward, FaServer } from 'react-icons/fa';
+import { FaForward } from 'react-icons/fa';
+import { FiCheck, FiSettings } from 'react-icons/fi';
 import {
   orderStreams,
   type StreamSource,
@@ -106,38 +107,59 @@ const SkipButton = styled.button`
   }
 `;
 
-const ServerBar = styled.div`
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-top: 0.6rem;
-  padding: 0 0.4rem;
-  font-size: 0.78rem;
-  color: var(--global-text-muted);
-
-  svg {
-    flex: none;
-  }
+const QualityWrap = styled.div`
+  position: absolute;
+  z-index: 6;
+  top: 0.6rem;
+  right: 0.6rem;
 `;
 
-const ServerChip = styled.button<{ $active: boolean; $failed: boolean }>`
-  padding: 0.4rem 0.8rem;
+const QualityBtn = styled.button`
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.65rem;
+  border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 999px;
-  border: 1px solid
-    ${({ $active }) => ($active ? 'var(--primary-accent)' : 'var(--global-border)')};
-  background: ${({ $active }) =>
-    $active ? 'var(--primary-accent)' : 'var(--global-button-bg)'};
-  color: ${({ $active }) => ($active ? '#fff' : 'var(--global-text)')};
-  opacity: ${({ $failed, $active }) => ($failed && !$active ? 0.45 : 1)};
-  font-size: 0.78rem;
+  background: rgba(10, 10, 14, 0.62);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  font-size: 0.72rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.2s ease;
+`;
 
-  &:hover {
-    background: var(--primary-accent);
+const QualityMenu = styled.div`
+  position: absolute;
+  top: calc(100% + 0.35rem);
+  right: 0;
+  min-width: 8rem;
+  padding: 0.3rem;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: rgba(20, 20, 26, 0.96);
+  box-shadow: 0 0.8rem 2rem rgba(0, 0, 0, 0.55);
+
+  button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    width: 100%;
+    padding: 0.5rem 0.65rem;
+    border: none;
+    border-radius: 0.5rem;
+    background: transparent;
     color: #fff;
+    font-size: 0.8rem;
+    cursor: pointer;
+    text-align: left;
+  }
+  button:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+  button.on {
+    color: #b7a9ff;
   }
 `;
 
@@ -183,12 +205,41 @@ export default function StreamPlayer({
   const [index, setIndex] = useState(0);
   const [failed, setFailed] = useState<Set<number>>(new Set());
   const [time, setTime] = useState(0);
+  const [quality, setQuality] = useState('auto');
+  const [qualityOpen, setQualityOpen] = useState(false);
+
+  // Distinct quality labels offered by separate sources (an HLS master playlist
+  // already has its own Auto / 1080p / 720p menu inside the player).
+  const qualities = useMemo(() => {
+    const seen = new Map<string, number>();
+    for (const sv of servers) {
+      if (sv.type === 'embed') continue;
+      const n = parseInt(String(sv.quality ?? ''), 10);
+      if (n > 0 && !seen.has(`${n}p`)) seen.set(`${n}p`, n);
+    }
+    return [...seen.entries()].sort((a, b) => b[1] - a[1]).map(([label]) => label);
+  }, [servers]);
+
+  const chooseQuality = (label: string) => {
+    setQuality(label);
+    setQualityOpen(false);
+    const i =
+      label === 'auto'
+        ? 0
+        : servers.findIndex((sv) => sv.type !== 'embed' && `${parseInt(String(sv.quality), 10)}p` === label);
+    if (i >= 0) {
+      setFailed(new Set());
+      setIndex(i);
+    }
+  };
 
   // New episode -> start over on the best server.
   useEffect(() => {
     setIndex(0);
     setFailed(new Set());
     setTime(0);
+    setQuality('auto');
+    setQualityOpen(false);
     resumed.current = false;
   }, [watch]);
 
@@ -296,10 +347,10 @@ export default function StreamPlayer({
   } else if (!current || allFailed) {
     content = (
       <Overlay>
-        <strong>No working server found</strong>
+        <strong>Couldn’t play this episode</strong>
         <span>
           {servers.length
-            ? 'Every server failed to load. Try another provider or audio track.'
+            ? 'None of the sources for this provider loaded. Try another provider or audio track.'
             : 'This episode has no sources yet. Try another provider.'}
         </span>
       </Overlay>
@@ -363,6 +414,23 @@ export default function StreamPlayer({
     <Wrapper>
       <Stage>
         {content}
+        {qualities.length > 1 && current && current.type !== 'embed' && (
+          <QualityWrap>
+            <QualityBtn onClick={() => setQualityOpen((v) => !v)} aria-label='Quality'>
+              <FiSettings /> {quality === 'auto' ? 'Auto' : quality}
+            </QualityBtn>
+            {qualityOpen && (
+              <QualityMenu>
+                {['auto', ...qualities].map((q) => (
+                  <button key={q} className={q === quality ? 'on' : ''} onClick={() => chooseQuality(q)}>
+                    {q === 'auto' ? 'Auto' : q}
+                    {q === quality && <FiCheck />}
+                  </button>
+                ))}
+              </QualityMenu>
+            )}
+          </QualityWrap>
+        )}
         {showIntroSkip && (
           <SkipButton onClick={() => (player.current!.currentTime = intro!.end)}>
             <FaForward /> Skip Intro
@@ -380,31 +448,6 @@ export default function StreamPlayer({
         )}
       </Stage>
 
-      {servers.length > 0 && (
-        <ServerBar>
-          <FaServer />
-          Server
-          {servers.map((s, i) => (
-            <ServerChip
-              key={`${s.server}-${s.type}-${i}`}
-              $active={i === index}
-              $failed={failed.has(i)}
-              onClick={() => {
-                setFailed((prev) => {
-                  const n = new Set(prev);
-                  n.delete(i);
-                  return n;
-                });
-                setIndex(i);
-              }}
-              title={s.server}
-            >
-              {s.server}
-              {s.type === 'embed' ? ' · embed' : s.quality ? ` · ${s.quality}` : ''}
-            </ServerChip>
-          ))}
-        </ServerBar>
-      )}
     </Wrapper>
   );
 }

@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import type * as React from 'react';
 import styled, { css, keyframes } from 'styled-components';
 import './GlassPlayer.css';
+import { FiFastForward, FiPlayCircle } from 'react-icons/fi';
 import {
   CameraIcon,
   CheckIcon,
@@ -55,6 +56,9 @@ type Props = {
   sourceQualities?: string[];
   sourceQuality?: string;
   onSourceQuality?: (label: string) => void;
+  /** ask before resuming from a saved spot ("Continue watching?") */
+  confirmResume?: boolean;
+  onResumeChoice?: (choice: 'resume' | 'start') => void;
   onReady?: () => void;
   /** the source cannot be played: let the page try another server */
   onFail?: () => void;
@@ -231,12 +235,13 @@ const Btn = styled.button<{ $on?: boolean }>`
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: transparent;
+  background: ${(p) => (p.$on ? 'rgba(255,255,255,.28)' : 'transparent')};
   color: inherit;
   cursor: pointer;
   transition:
     background 0.15s,
-    transform 0.15s;
+    transform 0.15s,
+    opacity 0.15s;
   svg {
     position: relative;
     width: ${BAR_ICON};
@@ -292,9 +297,10 @@ const Round = styled.button<{ $size: string; $left: string }>`
   ${glass}
   position: absolute;
   top: 50%;
-  /* small players: lift the buttons so the captions fit under them */
+  /* small players: slightly smaller buttons, still dead centre */
   @container (max-width: 34rem) {
-    top: 36%;
+    width: ${(p) => (p.$left === '50%' ? '2.4rem' : '2rem')};
+    height: ${(p) => (p.$left === '50%' ? '2.4rem' : '2rem')};
   }
   left: ${(p) => p.$left};
   width: ${(p) => p.$size};
@@ -525,6 +531,60 @@ function Slider({
     </SliderBox>
   );
 }
+
+const Prompt = styled.div`
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(0.6rem, 2.4cqw, 1.2rem);
+  padding: 1rem;
+  background: rgba(0, 0, 0, 0.55);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  color: #fff;
+  text-align: center;
+  animation: ${fadeIn} 0.2s ease;
+  h3 {
+    margin: 0;
+    font-size: clamp(1rem, 3.2cqw, 1.7rem);
+    font-weight: 800;
+  }
+  .acts {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 0.6rem 1rem;
+  }
+  button {
+    font: inherit;
+    font-size: clamp(0.78rem, 2cqw, 1.05rem);
+    font-weight: 700;
+    border: 0;
+    cursor: pointer;
+  }
+  .go {
+    padding: 0.7em 1.5em;
+    border-radius: 999px;
+    background: #fff;
+    color: #111;
+  }
+  .go:active {
+    transform: scale(0.97);
+  }
+  .no {
+    padding: 0.5em 0.4em;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.75);
+  }
+  .no:hover {
+    color: #fff;
+  }
+`;
 
 const Skips = styled.div`
   position: absolute;
@@ -833,6 +893,8 @@ export default function GlassPlayer({
   sourceQualities = [],
   sourceQuality = 'auto',
   onSourceQuality,
+  confirmResume = false,
+  onResumeChoice,
   onReady,
   onFail,
   onEnded,
@@ -909,6 +971,11 @@ export default function GlassPlayer({
   const insideRef = useRef<Record<SkipKind, boolean>>({ intro: false, outro: false });
   const lastTimeRef = useRef(0);
   const skipToastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const confirmRef = useRef(confirmResume);
+  useEffect(() => {
+    confirmRef.current = confirmResume;
+  });
+  const [resumePrompt, setResumePrompt] = useState<number | null>(null);
   const [skipTarget, setSkipTarget] = useState<SkipKind | null>(null);
   const [skipToast, setSkipToast] = useState<{ kind: SkipKind; from: number } | null>(null);
 
@@ -961,6 +1028,7 @@ export default function GlassPlayer({
     lastTimeRef.current = 0;
     setSkipTarget(null);
     setSkipToast(null);
+    setResumePrompt(null);
   }, [src]);
 
   const reportFail = () => {
@@ -1266,6 +1334,20 @@ export default function GlassPlayer({
     }
   };
   const toggleCaptions = () => setCaptionId(captionId ? null : firstId);
+  const chooseResume = (choice: 'resume' | 'start') => {
+    const v = videoRef.current;
+    const from = resumePrompt;
+    setResumePrompt(null);
+    onResumeChoice?.(choice);
+    if (!v) return;
+    v.currentTime = choice === 'resume' && from ? from : 0;
+    void v.play().catch(() => {});
+  };
+  const flagToggle = (opt: Option | undefined, label: string) => {
+    if (!opt) return;
+    opt.onChange(!opt.value);
+    showNotice(`${label} ${opt.value ? 'off' : 'on'}`);
+  };
 
   /* ---------- fullscreen / cast / screenshot / download ---------- */
   const toggleFullscreen = useCallback(async () => {
@@ -1513,8 +1595,10 @@ export default function GlassPlayer({
   const useSources = !useLevels && sourceQualities.length > 1;
 
   const captionStyleVars: CSSProperties = {
-    fontSize: `calc(clamp(0.85rem, 2.6cqw, 2.5rem) * ${CAPTION_SIZES[captionSize].scale})`,
+    // while the controls are showing the text shrinks so it fits between the buttons and the bar
+    fontSize: `calc(clamp(0.85rem, 2.6cqw, 2.5rem) * ${CAPTION_SIZES[captionSize].scale} * ${controlsHidden ? 1 : 0.78})`,
     fontFamily: CAPTION_FONT,
+    transition: 'font-size 0.25s ease',
   };
 
   return (
@@ -1552,7 +1636,10 @@ export default function GlassPlayer({
           setLoading(true);
         }}
         onEmptied={() => setPlaying(false)}
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          setPlaying(true);
+          setResumePrompt(null);
+        }}
         onPause={() => setPlaying(false)}
         onPlaying={() => {
           startedRef.current = true;
@@ -1599,7 +1686,11 @@ export default function GlassPlayer({
           // resume once per source (a server switch keeps the spot the viewer was at)
           const from = startAtRef.current;
           if (from && from > 3 && Number.isFinite(v.duration) && from < v.duration - 15 && resumedRef.current !== src) {
-            v.currentTime = from;
+            if (confirmRef.current) {
+              // "Continue watching?": hold playback until the viewer chooses
+              setResumePrompt(from);
+              autoTriedRef.current = true;
+            } else v.currentTime = from;
           }
           resumedRef.current = src;
           v.playbackRate = speed;
@@ -1631,6 +1722,20 @@ export default function GlassPlayer({
       />
 
       <Dim $on={!controlsHidden} />
+
+      {resumePrompt !== null && (
+        <Prompt role='dialog' aria-label='Continue watching?'>
+          <h3>Continue watching?</h3>
+          <div className='acts'>
+            <button type='button' className='go' onClick={() => chooseResume('resume')}>
+              Continue from {formatTime(resumePrompt)}
+            </button>
+            <button type='button' className='no' onClick={() => chooseResume('start')}>
+              Start from the beginning
+            </button>
+          </div>
+        </Prompt>
+      )}
 
       {(skipTarget || skipToast) && (
         <Skips>
@@ -1714,6 +1819,32 @@ export default function GlassPlayer({
         </Pill>
 
         <Pill>
+          {autoplayOption && (
+            <Btn
+              type='button'
+              $on={autoplayOption.value}
+              aria-pressed={autoplayOption.value}
+              aria-label={`Autoplay ${autoplayOption.value ? 'on' : 'off'}`}
+              title='Autoplay'
+              onClick={() => flagToggle(autoplayOption, 'Autoplay')}
+              style={{ opacity: autoplayOption.value ? 1 : 0.55 }}
+            >
+              <FiPlayCircle />
+            </Btn>
+          )}
+          {autoSkipOption && (
+            <Btn
+              type='button'
+              $on={autoSkipOption.value}
+              aria-pressed={autoSkipOption.value}
+              aria-label={`Auto skip intro/outro ${autoSkipOption.value ? 'on' : 'off'}`}
+              title='Auto skip intro/outro'
+              onClick={() => flagToggle(autoSkipOption, 'Auto skip')}
+              style={{ opacity: autoSkipOption.value ? 1 : 0.55 }}
+            >
+              <FiFastForward />
+            </Btn>
+          )}
           <Btn type='button' aria-label='Screenshot' title='Screenshot' onClick={takeScreenshot}>
             <CameraIcon />
           </Btn>
@@ -1852,24 +1983,6 @@ export default function GlassPlayer({
                   value={speed === 1 ? 'Normal' : `${speed}x`}
                   onClick={() => setMenuView('speed')}
                 />
-                {autoplayOption && (
-                  <Row
-                    icon={<PlayIcon />}
-                    label='Autoplay'
-                    value={autoplayOption.value ? 'On' : 'Off'}
-                    chevron={false}
-                    onClick={() => autoplayOption.onChange(!autoplayOption.value)}
-                  />
-                )}
-                {autoSkipOption && (
-                  <Row
-                    icon={<SeekForward10Icon />}
-                    label='Auto skip intro/outro'
-                    value={!intro && !outro ? 'No data' : autoSkipOption.value ? 'On' : 'Off'}
-                    chevron={false}
-                    onClick={() => autoSkipOption.onChange(!autoSkipOption.value)}
-                  />
-                )}
                 {autoNextOption && (
                   <Row
                     icon={<SeekForward10Icon />}

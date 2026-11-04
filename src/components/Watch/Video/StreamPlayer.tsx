@@ -98,6 +98,8 @@ export default function StreamPlayer({
   onFlag,
 }: Props) {
   const stallTimer = useRef<number | undefined>(undefined);
+  // the viewer's answer to "Continue watching?" (kept across server switches)
+  const resumeChoice = useRef<'resume' | 'start' | null>(null);
 
   const servers = useMemo(() => orderStreams(watch?.streams ?? []), [watch]);
   const [index, setIndex] = useState(0);
@@ -132,6 +134,7 @@ export default function StreamPlayer({
   useEffect(() => {
     setIndex(0);
     setFailed(new Set());
+    resumeChoice.current = null;
     setQuality('auto');
   }, [watch]);
 
@@ -228,7 +231,11 @@ export default function StreamPlayer({
         title={title}
         poster={poster}
         tracks={tracks}
-        startTime={startTime}
+        startTime={resumeChoice.current === 'start' ? 0 : startTime}
+        confirmResume={resumeChoice.current === null && startTime > 5}
+        onResumeChoice={(c) => {
+          resumeChoice.current = c;
+        }}
         autoPlay={autoPlay}
         intro={intro}
         outro={outro}

@@ -127,16 +127,15 @@ function unlockOrientation() {
 
 const glass = css`
   position: relative;
-  background: rgba(255, 255, 255, 0.34);
-  -webkit-backdrop-filter: blur(20px) saturate(1.8);
-  backdrop-filter: blur(20px) saturate(1.8);
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.12);
+  -webkit-backdrop-filter: blur(8px) saturate(1.5);
+  backdrop-filter: blur(8px) saturate(1.5);
+  border: 1px solid rgba(255, 255, 255, 0.4);
   box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.75),
-    inset 0 -1px 0 rgba(255, 255, 255, 0.18),
-    inset 0 0 18px rgba(255, 255, 255, 0.12),
-    0 8px 28px rgba(0, 0, 0, 0.28);
-  color: #17171a;
+    inset 0 1px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    0 6px 20px rgba(0, 0, 0, 0.22);
+  color: #fff;
 
   &::before {
     content: '';
@@ -144,7 +143,7 @@ const glass = css`
     inset: 0;
     border-radius: inherit;
     pointer-events: none;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.38), rgba(255, 255, 255, 0) 55%);
+    background: linear-gradient(180deg, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 50%);
   }
 `;
 
@@ -206,6 +205,7 @@ const Layer = styled.div<{ $off: boolean; $from?: 'top' | 'bottom' }>`
 
 const TopBar = styled(Layer)`
   inset: 0 0 auto 0;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0.4), transparent);
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -214,11 +214,10 @@ const TopBar = styled(Layer)`
 `;
 
 const Pill = styled.div`
-  ${glass}
   display: flex;
   align-items: center;
-  padding: clamp(0.125rem, 0.32cqw, 0.25rem);
-  border-radius: 999px;
+  color: #fff;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
 `;
 
 const Btn = styled.button<{ $on?: boolean }>`
@@ -231,7 +230,7 @@ const Btn = styled.button<{ $on?: boolean }>`
   padding: 0;
   border: 0;
   border-radius: 50%;
-  background: ${(p) => (p.$on ? 'rgba(255,255,255,.5)' : 'transparent')};
+  background: transparent;
   color: inherit;
   cursor: pointer;
   transition:
@@ -242,7 +241,7 @@ const Btn = styled.button<{ $on?: boolean }>`
     height: ${BAR_ICON};
   }
   &:hover {
-    background: rgba(255, 255, 255, 0.45);
+    background: rgba(255, 255, 255, 0.18);
   }
   &:active {
     transform: scale(0.93);
@@ -321,14 +320,15 @@ const Spin = styled.div`
   width: 1.6rem;
   height: 1.6rem;
   border-radius: 50%;
-  border: 3px solid rgba(0, 0, 0, 0.18);
-  border-top-color: #17171a;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
   animation: ${spin} 0.8s linear infinite;
 `;
 
 const BottomBar = styled(Layer)`
   inset: auto 0 0 0;
-  padding: 0 clamp(0.75rem, 3.5cqw, 3rem) clamp(0.8rem, 3cqw, 2.25rem);
+  background: linear-gradient(0deg, rgba(0, 0, 0, 0.5), transparent);
+  padding: 1.2rem clamp(0.75rem, 3.5cqw, 3rem) clamp(0.8rem, 3cqw, 2.25rem);
 `;
 
 const InfoRow = styled.div`
@@ -340,13 +340,12 @@ const InfoRow = styled.div`
 `;
 
 const TimePill = styled.span`
-  ${glass}
   display: inline-flex;
   align-items: center;
   min-width: 0;
   height: ${PILL_H};
-  padding: 0 clamp(0.6rem, 1.6cqw, 1rem);
-  border-radius: 999px;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
   font-size: clamp(0.7rem, 1.7cqw, 0.95rem);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -385,17 +384,14 @@ const FsBtn = styled.button`
     height: ${BAR_ICON};
   }
   &:hover {
-    background: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.25);
   }
 `;
 
 const SeekWrap = styled.div`
-  ${glass}
   display: flex;
   align-items: center;
-  height: 1.7rem;
-  padding: 0 0.8rem;
-  border-radius: 999px;
+  height: 1.25rem;
 `;
 
 /* custom slider (replaces Radix) */
@@ -414,7 +410,7 @@ const SliderBox = styled.div`
     width: 100%;
     height: 0.3rem;
     border-radius: 999px;
-    background: rgba(0, 0, 0, 0.2);
+    background: rgba(255, 255, 255, 0.3);
     transition: height 0.15s;
   }
   &:hover .rail,
@@ -428,10 +424,10 @@ const SliderBox = styled.div`
     border-radius: inherit;
   }
   .buf {
-    background: rgba(0, 0, 0, 0.18);
+    background: rgba(255, 255, 255, 0.5);
   }
   .fill {
-    background: #17171a;
+    background: #fff;
   }
   .thumb {
     position: absolute;
@@ -566,17 +562,17 @@ const Skips = styled.div`
   }
   .toast button {
     padding: 0.25em 0.9em;
-    background: rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.25);
     box-shadow: none;
   }
 `;
 
 const CaptionBox = styled.div<{ $lift: boolean }>`
   position: absolute;
-  z-index: 5;
+  z-index: 15;
   left: 0;
   right: 0;
-  bottom: ${(p) => (p.$lift ? 'clamp(5.6rem, 15cqw, 9.5rem)' : 'clamp(0.8rem, 3.2cqw, 2.6rem)')};
+  bottom: ${(p) => (p.$lift ? 'clamp(4.2rem, 12cqw, 8rem)' : 'clamp(0.8rem, 3.2cqw, 2.6rem)')};
   transition: bottom 0.25s ease;
   display: flex;
   justify-content: center;
@@ -699,7 +695,7 @@ const MenuWrap = styled.div`
   transform-origin: top right;
   animation: ${fadeIn} 0.15s ease;
   font-size: clamp(0.75rem, 1.9cqw, 1.05rem);
-  color: #17171a;
+  color: #fff;
 
   .sheet {
     ${glass}
@@ -707,7 +703,9 @@ const MenuWrap = styled.div`
     overflow-y: auto;
     padding: 0.55em;
     border-radius: 1.5em;
-    background: rgba(255, 255, 255, 0.52);
+    background: rgba(20, 20, 26, 0.42);
+    -webkit-backdrop-filter: blur(16px) saturate(1.6);
+    backdrop-filter: blur(16px) saturate(1.6);
     display: flex;
     flex-direction: column;
     gap: 0.4em;
@@ -722,9 +720,9 @@ const MenuWrap = styled.div`
     gap: 0.75em;
     width: 100%;
     padding: 0.6em 0.9em;
-    border: 1px solid rgba(255, 255, 255, 0.6);
+    border: 1px solid rgba(255, 255, 255, 0.18);
     border-radius: 1em;
-    background: rgba(255, 255, 255, 0.35);
+    background: rgba(255, 255, 255, 0.1);
     color: inherit;
     font: inherit;
     text-align: left;
@@ -732,11 +730,11 @@ const MenuWrap = styled.div`
     transition: background 0.15s;
   }
   .row:hover {
-    background: rgba(255, 255, 255, 0.6);
+    background: rgba(255, 255, 255, 0.2);
   }
   .row.sel {
-    background: rgba(255, 255, 255, 0.75);
-    border-color: #fff;
+    background: rgba(255, 255, 255, 0.28);
+    border-color: rgba(255, 255, 255, 0.6);
   }
   .row svg {
     flex: none;

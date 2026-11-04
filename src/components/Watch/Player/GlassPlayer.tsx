@@ -292,6 +292,10 @@ const Round = styled.button<{ $size: string; $left: string }>`
   ${glass}
   position: absolute;
   top: 50%;
+  /* small players: lift the buttons so the captions fit under them */
+  @container (max-width: 34rem) {
+    top: 36%;
+  }
   left: ${(p) => p.$left};
   width: ${(p) => p.$size};
   height: ${(p) => p.$size};
@@ -578,7 +582,7 @@ const CaptionBox = styled.div<{ $lift: boolean }>`
      so the text never sits on the progress bar. */
   bottom: ${(p) =>
     p.$lift
-      ? `calc(clamp(0.8rem, 3cqw, 2.25rem) + clamp(0.25rem, 1cqw, 0.75rem) + ${PILL_H} + 1.25rem + 0.5rem)`
+      ? `calc(clamp(0.8rem, 3cqw, 2.25rem) + clamp(0.25rem, 1cqw, 0.75rem) + ${PILL_H} + 1.25rem + 0.3rem)`
       : 'clamp(0.6rem, 2.6cqw, 2.4rem)'};
   transition: bottom 0.25s ease;
   display: flex;

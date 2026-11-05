@@ -259,8 +259,8 @@ const Switch = styled.button<{ $on: boolean }>`
   position: relative;
   z-index: 1;
   flex: none;
-  width: clamp(2.5rem, 6.2cqw, 3.5rem);
-  height: clamp(1.3rem, 3.2cqw, 1.8rem);
+  width: clamp(2rem, 4.6cqw, 2.7rem);
+  height: clamp(1rem, 2.4cqw, 1.4rem);
   margin: 0 0.2rem;
   padding: 0;
   border: 0;
@@ -276,14 +276,14 @@ const Switch = styled.button<{ $on: boolean }>`
     left: 0.12rem;
     display: grid;
     place-items: center;
-    width: calc(clamp(1.3rem, 3.2cqw, 1.8rem) - 0.24rem);
-    height: calc(clamp(1.3rem, 3.2cqw, 1.8rem) - 0.24rem);
+    width: calc(clamp(1rem, 2.4cqw, 1.4rem) - 0.24rem);
+    height: calc(clamp(1rem, 2.4cqw, 1.4rem) - 0.24rem);
     border-radius: 50%;
     background: #fff;
     color: #17171a;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
     transform: translate(
-      ${(p) => (p.$on ? 'calc(clamp(2.5rem, 6.2cqw, 3.5rem) - clamp(1.3rem, 3.2cqw, 1.8rem))' : '0')},
+      ${(p) => (p.$on ? 'calc(clamp(2rem, 4.6cqw, 2.7rem) - clamp(1rem, 2.4cqw, 1.4rem))' : '0')},
       -50%
     );
     transition: transform 0.2s ease;
@@ -376,10 +376,12 @@ const Spin = styled.div`
   animation: ${spin} 0.8s linear infinite;
 `;
 
-const BottomBar = styled(Layer)`
+const BottomBar = styled(Layer)<{ $room: boolean }>`
   inset: auto 0 0 0;
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.5), transparent);
-  padding: 1.2rem clamp(0.75rem, 3.5cqw, 3rem) clamp(0.8rem, 3cqw, 2.25rem);
+  padding: 1.2rem clamp(0.75rem, 3.5cqw, 3rem)
+    ${(p) => (p.$room ? 'calc(clamp(0.8rem, 3cqw, 2.25rem) + clamp(2.1rem, 6.2cqw, 4.2rem))' : 'clamp(0.8rem, 3cqw, 2.25rem)')};
+  transition: opacity 0.3s ease, transform 0.3s ease, padding 0.2s ease;
 `;
 
 const InfoRow = styled.div`
@@ -672,18 +674,13 @@ const Skips = styled.div`
   }
 `;
 
-const CaptionBox = styled.div<{ $lift: boolean }>`
+const CaptionBox = styled.div`
   position: absolute;
   z-index: 15;
   left: 0;
   right: 0;
-  /* controls hidden: right at the bottom. controls showing: just above the time row,
-     so the text never sits on the progress bar. */
-  bottom: ${(p) =>
-    p.$lift
-      ? `calc(clamp(0.8rem, 3cqw, 2.25rem) + clamp(0.25rem, 1cqw, 0.75rem) + ${PILL_H} + 1.25rem + 0.3rem)`
-      : 'clamp(0.6rem, 2.6cqw, 2.4rem)'};
-  transition: bottom 0.25s ease;
+  /* always at the very bottom; the controls make room for it instead */
+  bottom: clamp(0.5rem, 2cqw, 1.6rem);
   display: flex;
   justify-content: center;
   padding: 0 5cqw;
@@ -1796,7 +1793,7 @@ export default function GlassPlayer({
       )}
 
       {cueText && (
-        <CaptionBox $lift={!controlsHidden}>
+        <CaptionBox>
           <p style={captionStyleVars}>
             <span className={captionStyle === 'box' ? 'box' : 'outline'}>{cueText}</span>
           </p>
@@ -1944,7 +1941,7 @@ export default function GlassPlayer({
       </CenterLayer>
 
       {/* bottom: time + fullscreen above the progress bar */}
-      <BottomBar $off={controlsHidden} $from='bottom'>
+      <BottomBar $off={controlsHidden} $from='bottom' $room={Boolean(cueText)}>
         <InfoRow>
           <TimePill>
             <span>

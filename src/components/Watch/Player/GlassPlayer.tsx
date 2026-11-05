@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import type * as React from 'react';
 import styled, { css, keyframes } from 'styled-components';
 import './GlassPlayer.css';
-import { FiFastForward, FiPlayCircle } from 'react-icons/fi';
+import { FiFastForward, FiPlay } from 'react-icons/fi';
 import {
   CameraIcon,
   CheckIcon,
@@ -252,6 +252,45 @@ const Btn = styled.button<{ $on?: boolean }>`
   }
   &:active {
     transform: scale(0.93);
+  }
+`;
+
+const Switch = styled.button<{ $on: boolean }>`
+  position: relative;
+  z-index: 1;
+  flex: none;
+  width: clamp(2.5rem, 6.2cqw, 3.5rem);
+  height: clamp(1.3rem, 3.2cqw, 1.8rem);
+  margin: 0 0.2rem;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  background: ${(p) => (p.$on ? 'rgba(255, 255, 255, 0.38)' : 'rgba(0, 0, 0, 0.5)')};
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35);
+  transition: background 0.2s ease;
+
+  i {
+    position: absolute;
+    top: 50%;
+    left: 0.12rem;
+    display: grid;
+    place-items: center;
+    width: calc(clamp(1.3rem, 3.2cqw, 1.8rem) - 0.24rem);
+    height: calc(clamp(1.3rem, 3.2cqw, 1.8rem) - 0.24rem);
+    border-radius: 50%;
+    background: #fff;
+    color: #17171a;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+    transform: translate(
+      ${(p) => (p.$on ? 'calc(clamp(2.5rem, 6.2cqw, 3.5rem) - clamp(1.3rem, 3.2cqw, 1.8rem))' : '0')},
+      -50%
+    );
+    transition: transform 0.2s ease;
+  }
+  i svg {
+    width: 62%;
+    height: 62%;
   }
 `;
 
@@ -1820,30 +1859,34 @@ export default function GlassPlayer({
 
         <Pill>
           {autoplayOption && (
-            <Btn
+            <Switch
               type='button'
+              role='switch'
               $on={autoplayOption.value}
-              aria-pressed={autoplayOption.value}
-              aria-label={`Autoplay ${autoplayOption.value ? 'on' : 'off'}`}
+              aria-checked={autoplayOption.value}
+              aria-label='Autoplay'
               title='Autoplay'
               onClick={() => flagToggle(autoplayOption, 'Autoplay')}
-              style={{ opacity: autoplayOption.value ? 1 : 0.55 }}
             >
-              <FiPlayCircle />
-            </Btn>
+              <i>
+                <FiPlay />
+              </i>
+            </Switch>
           )}
           {autoSkipOption && (
-            <Btn
+            <Switch
               type='button'
+              role='switch'
               $on={autoSkipOption.value}
-              aria-pressed={autoSkipOption.value}
-              aria-label={`Auto skip intro/outro ${autoSkipOption.value ? 'on' : 'off'}`}
+              aria-checked={autoSkipOption.value}
+              aria-label='Auto skip intro/outro'
               title='Auto skip intro/outro'
               onClick={() => flagToggle(autoSkipOption, 'Auto skip')}
-              style={{ opacity: autoSkipOption.value ? 1 : 0.55 }}
             >
-              <FiFastForward />
-            </Btn>
+              <i>
+                <FiFastForward />
+              </i>
+            </Switch>
           )}
           <Btn type='button' aria-label='Screenshot' title='Screenshot' onClick={takeScreenshot}>
             <CameraIcon />

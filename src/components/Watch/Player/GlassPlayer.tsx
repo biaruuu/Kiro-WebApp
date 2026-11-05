@@ -384,8 +384,10 @@ const BottomBar = styled(Layer)`
 
 const InfoRow = styled.div`
   display: flex;
-  align-items: center;
-  gap: clamp(0.5rem, 1.8cqw, 1rem);
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: clamp(0.25rem, 1cqw, 0.75rem);
 `;
 
 const TimePill = styled.span`
@@ -438,11 +440,9 @@ const FsBtn = styled.button`
 `;
 
 const SeekWrap = styled.div`
-  flex: 1;
-  min-width: 0;
   display: flex;
   align-items: center;
-  height: 1.5rem;
+  height: 1.25rem;
 `;
 
 /* custom slider (replaces Radix) */
@@ -681,12 +681,14 @@ const CaptionBox = styled.div<{ $lift: boolean }>`
      clear of every icon. */
   bottom: ${(p) =>
     p.$lift
-      ? `calc(clamp(0.8rem, 3cqw, 2.25rem) + ${PILL_H} + 0.2rem)`
+      ? `calc(clamp(0.8rem, 3cqw, 2.25rem) + 1.25rem + 0.15rem)`
       : 'clamp(0.5rem, 2cqw, 1.6rem)'};
   transition: bottom 0.2s ease;
   display: flex;
   justify-content: center;
-  padding: 0 5cqw;
+  /* while the controls show, stay between the time (left) and fullscreen button (right) */
+  padding: 0 ${(p) => (p.$lift ? 'clamp(6.2rem, 22cqw, 14rem)' : '5cqw')};
+  transition: padding 0.2s ease;
   pointer-events: none;
   p {
     margin: 0;
@@ -1968,23 +1970,6 @@ export default function GlassPlayer({
               {title && <em className='ttl'> • {title}</em>}
             </span>
           </TimePill>
-          <SeekWrap>
-            <Slider
-              label='Seek'
-              value={currentTime}
-              max={duration || 100}
-              step={0.1}
-              buffered={bufferedPct}
-              onChange={(v) => {
-                setScrubbing(true);
-                setCurrentTime(v);
-              }}
-              onCommit={(v) => {
-                if (videoRef.current) videoRef.current.currentTime = v;
-                setScrubbing(false);
-              }}
-            />
-          </SeekWrap>
           <FsBtn
             type='button'
             aria-label={fullscreen ? 'Exit fullscreen (f)' : 'Fullscreen (f)'}
@@ -1994,6 +1979,23 @@ export default function GlassPlayer({
             {fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
           </FsBtn>
         </InfoRow>
+        <SeekWrap>
+          <Slider
+            label='Seek'
+            value={currentTime}
+            max={duration || 100}
+            step={0.1}
+            buffered={bufferedPct}
+            onChange={(v) => {
+              setScrubbing(true);
+              setCurrentTime(v);
+            }}
+            onCommit={(v) => {
+              if (videoRef.current) videoRef.current.currentTime = v;
+              setScrubbing(false);
+            }}
+          />
+        </SeekWrap>
       </BottomBar>
 
       {/* settings menu */}

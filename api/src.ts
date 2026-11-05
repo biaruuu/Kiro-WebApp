@@ -119,8 +119,8 @@ const rankOf = (real: string) => {
   return i === -1 ? 99 : i;
 };
 
-const proxied = async (url: string, referer?: string) =>
-  `/api/stream?t=${await seal({ u: url, r: referer || '' })}`;
+const proxied = async (url: string, referer?: string, key?: string) =>
+  `/api/stream?t=${await seal(key ? { u: url, r: referer || '', k: key } : { u: url, r: referer || '' })}`;
 
 const isHttp = (u: unknown): u is string => typeof u === 'string' && /^https?:\/\//i.test(u);
 
@@ -219,7 +219,7 @@ async function watch(token: string) {
     native.map(async (s, i) => {
       const ref = s.referer || headerRef;
       return {
-        url: await proxied(s.url, ref),
+        url: await proxied(s.url, ref, typeof (s.playlist_key ?? s.key) === 'string' ? (s.playlist_key ?? s.key) : undefined),
         type: s.type,
         server: `Server ${i + 1}`,
         quality: s.quality,

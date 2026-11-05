@@ -71,7 +71,7 @@ async function seal(payload: unknown): Promise<string> {
   return toB64(out);
 }
 
-async function open(token: string): Promise<{ u?: string; r?: string } | null> {
+async function open(token: string): Promise<{ u?: string; r?: string; k?: string } | null> {
   try {
     const raw = fromB64(token);
     const data = await crypto.subtle.decrypt(
@@ -85,11 +85,48 @@ async function open(token: string): Promise<{ u?: string; r?: string } | null> {
   }
 }
 
-async function proxied(absUrl: string, ref: string): Promise<string> {
-  return `/api/stream?t=${await seal({ u: absUrl, r: ref })}`;
+async function proxied(absUrl: string, ref: string, key?: string): Promise<string> {
+  return `/api/stream?t=${await seal(key ? { u: absUrl, r: ref, k: key } : { u: absUrl, r: ref })}`;
 }
 
-async function rewritePlaylist(text: string, baseUrl: string, ref: string): Promise<string> {
+// --- FlixCloud playback (ReAnime) -------------------------------------------------
+// Some manifests come back as Base64 + XOR instead of plain "#EXTM3U"; the API hands
+// out the key (`playlist_key`) for them. Image-wrapped segments (.png/.webp) are
+// unwrapped before they reach the player. Both follow the upstream API's own docs.
+function decryptManifest(body: string, playlistKey: string): string | null {
+  try {
+    const key = fromB64(playlistKey);
+    const payload = fromB64(body.trim().replace(/\s+/g, ''));
+    const out = new Uint8Array(payload.length);
+    for (let i = 0; i < payload.length; i++) out[i] = payload[i] ^ key[i % key.length];
+    const text = dec.decode(out).trim();
+    return text.startsWith('#EXTM3U') ? text : null;
+  } catch {
+    return null;
+  }
+}
+
+const SEGMENT_XOR = Uint8Array.from([157, 42, 241, 71, 179, 142, 92, 112, 166, 25, 228, 59, 216, 98, 15, 197]);
+
+function unwrapImageSegment(body: Uint8Array): Uint8Array | null {
+  let offset = 0;
+  const isWebp =
+    body.length > 12 &&
+    body[0] === 0x52 && body[1] === 0x49 && body[2] === 0x46 && body[3] === 0x46 &&
+    body[8] === 0x57 && body[9] === 0x45 && body[10] === 0x42 && body[11] === 0x50;
+  const isPng =
+    body.length > 8 &&
+    body[0] === 0x89 && body[1] === 0x50 && body[2] === 0x4e && body[3] === 0x47 &&
+    body[4] === 0x0d && body[5] === 0x0a && body[6] === 0x1a && body[7] === 0x0a;
+  if (isWebp) offset = 12;
+  else if (isPng) offset = 8;
+  if (!offset) return null;
+  const out = body.slice(offset);
+  if (out[0] !== 0x47) for (let i = 0; i < out.length; i++) out[i] ^= SEGMENT_XOR[i % SEGMENT_XOR.length];
+  return out;
+}
+
+async function rewritePlaylist(text: string, baseUrl: string, ref: string, key?: string): Promise<string> {
   const resolve = (u: string) => {
     try {
       return new URL(u, baseUrl).toString();
@@ -107,11 +144,11 @@ async function rewritePlaylist(text: string, baseUrl: string, ref: string): Prom
         if (!uris.length) return line;
         let out = line;
         for (const m of uris) {
-          out = out.replace(m[0], `URI="${await proxied(resolve(m[1]), ref)}"`);
+          out = out.replace(m[0], `URI="${await proxied(resolve(m[1]), ref, key)}"`);
         }
         return out;
       }
-      return proxied(resolve(trimmed), ref);
+      return proxied(resolve(trimmed), ref, key);
     }),
   );
   return lines.join('\n');
@@ -135,6 +172,7 @@ export default async function handler(req: Request): Promise<Response> {
   const opened = await open(token);
   const target = opened?.u;
   const ref = opened?.r || '';
+  const key = opened?.k || '';
   if (!target) return new Response('Invalid token', { status: 400 });
 
   let upstream: URL;
@@ -174,9 +212,10 @@ export default async function handler(req: Request): Promise<Response> {
     /mpegurl/i.test(contentType) || /\.m3u8(\?|$)/i.test(upstream.pathname + upstream.search);
 
   if (looksLikePlaylist && res.ok) {
-    const text = await res.text();
+    let text = await res.text();
+    if (key && !text.trimStart().startsWith('#EXTM3U')) text = decryptManifest(text, key) ?? text;
     if (text.trimStart().startsWith('#EXTM3U')) {
-      return new Response(await rewritePlaylist(text, res.url || upstream.toString(), ref), {
+      return new Response(await rewritePlaylist(text, res.url || upstream.toString(), ref, key || undefined), {
         status: 200,
         headers: {
           'Content-Type': 'application/vnd.apple.mpegurl',
@@ -188,6 +227,19 @@ export default async function handler(req: Request): Promise<Response> {
     return new Response(text, {
       status: res.status,
       headers: { 'Content-Type': contentType || 'text/plain' },
+    });
+  }
+
+  // image-wrapped segments (only for tokens that carry a FlixCloud key)
+  if (key && res.ok && req.method === 'GET' && /\.(png|webp|jpe?g)(\?|$)/i.test(upstream.pathname + upstream.search)) {
+    const raw = new Uint8Array(await res.arrayBuffer());
+    const clean = unwrapImageSegment(raw);
+    return new Response(clean ?? raw, {
+      status: 200,
+      headers: {
+        'Content-Type': clean ? 'video/mp2t' : contentType || 'application/octet-stream',
+        'Cache-Control': 'public, max-age=3600',
+      },
     });
   }
 

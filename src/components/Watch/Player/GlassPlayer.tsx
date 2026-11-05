@@ -9,7 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties }
 import type * as React from 'react';
 import styled, { css, keyframes } from 'styled-components';
 import './GlassPlayer.css';
-import { FiFastForward, FiPlay } from 'react-icons/fi';
+import { FiFastForward, FiPlay, FiSkipForward } from 'react-icons/fi';
 import {
   CameraIcon,
   CheckIcon,
@@ -259,8 +259,8 @@ const Switch = styled.button<{ $on: boolean }>`
   position: relative;
   z-index: 1;
   flex: none;
-  width: clamp(2rem, 4.6cqw, 2.7rem);
-  height: clamp(1rem, 2.4cqw, 1.4rem);
+  width: clamp(1.7rem, 4cqw, 2.4rem);
+  height: clamp(0.9rem, 2.1cqw, 1.25rem);
   margin: 0 0.2rem;
   padding: 0;
   border: 0;
@@ -276,14 +276,14 @@ const Switch = styled.button<{ $on: boolean }>`
     left: 0.12rem;
     display: grid;
     place-items: center;
-    width: calc(clamp(1rem, 2.4cqw, 1.4rem) - 0.24rem);
-    height: calc(clamp(1rem, 2.4cqw, 1.4rem) - 0.24rem);
+    width: calc(clamp(0.9rem, 2.1cqw, 1.25rem) - 0.24rem);
+    height: calc(clamp(0.9rem, 2.1cqw, 1.25rem) - 0.24rem);
     border-radius: 50%;
     background: #fff;
     color: #17171a;
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
     transform: translate(
-      ${(p) => (p.$on ? 'calc(clamp(2rem, 4.6cqw, 2.7rem) - clamp(1rem, 2.4cqw, 1.4rem))' : '0')},
+      ${(p) => (p.$on ? 'calc(clamp(1.7rem, 4cqw, 2.4rem) - clamp(0.9rem, 2.1cqw, 1.25rem))' : '0')},
       -50%
     );
     transition: transform 0.2s ease;
@@ -376,20 +376,16 @@ const Spin = styled.div`
   animation: ${spin} 0.8s linear infinite;
 `;
 
-const BottomBar = styled(Layer)<{ $room: boolean }>`
+const BottomBar = styled(Layer)`
   inset: auto 0 0 0;
   background: linear-gradient(0deg, rgba(0, 0, 0, 0.5), transparent);
-  padding: 1.2rem clamp(0.75rem, 3.5cqw, 3rem)
-    ${(p) => (p.$room ? 'calc(clamp(0.8rem, 3cqw, 2.25rem) + clamp(2.1rem, 6.2cqw, 4.2rem))' : 'clamp(0.8rem, 3cqw, 2.25rem)')};
-  transition: opacity 0.3s ease, transform 0.3s ease, padding 0.2s ease;
+  padding: 1.2rem clamp(0.75rem, 3.5cqw, 3rem) clamp(0.8rem, 3cqw, 2.25rem);
 `;
 
 const InfoRow = styled.div`
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: clamp(0.25rem, 1cqw, 0.75rem);
+  align-items: center;
+  gap: clamp(0.5rem, 1.8cqw, 1rem);
 `;
 
 const TimePill = styled.span`
@@ -442,9 +438,11 @@ const FsBtn = styled.button`
 `;
 
 const SeekWrap = styled.div`
+  flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
-  height: 1.25rem;
+  height: 1.5rem;
 `;
 
 /* custom slider (replaces Radix) */
@@ -674,13 +672,18 @@ const Skips = styled.div`
   }
 `;
 
-const CaptionBox = styled.div`
+const CaptionBox = styled.div<{ $lift: boolean }>`
   position: absolute;
   z-index: 15;
   left: 0;
   right: 0;
-  /* always at the very bottom; the controls make room for it instead */
-  bottom: clamp(0.5rem, 2cqw, 1.6rem);
+  /* controls hidden: bottom edge. Controls showing: a little above the seek bar row,
+     clear of every icon. */
+  bottom: ${(p) =>
+    p.$lift
+      ? `calc(clamp(0.8rem, 3cqw, 2.25rem) + ${PILL_H} + 0.2rem)`
+      : 'clamp(0.5rem, 2cqw, 1.6rem)'};
+  transition: bottom 0.2s ease;
   display: flex;
   justify-content: center;
   padding: 0 5cqw;
@@ -1793,7 +1796,7 @@ export default function GlassPlayer({
       )}
 
       {cueText && (
-        <CaptionBox>
+        <CaptionBox $lift={!controlsHidden}>
           <p style={captionStyleVars}>
             <span className={captionStyle === 'box' ? 'box' : 'outline'}>{cueText}</span>
           </p>
@@ -1885,6 +1888,21 @@ export default function GlassPlayer({
               </i>
             </Switch>
           )}
+          {autoNextOption && (
+            <Switch
+              type='button'
+              role='switch'
+              $on={autoNextOption.value}
+              aria-checked={autoNextOption.value}
+              aria-label='Auto next episode'
+              title='Auto next episode'
+              onClick={() => flagToggle(autoNextOption, 'Auto next')}
+            >
+              <i>
+                <FiSkipForward />
+              </i>
+            </Switch>
+          )}
           <Btn type='button' aria-label='Screenshot' title='Screenshot' onClick={takeScreenshot}>
             <CameraIcon />
           </Btn>
@@ -1941,7 +1959,7 @@ export default function GlassPlayer({
       </CenterLayer>
 
       {/* bottom: time + fullscreen above the progress bar */}
-      <BottomBar $off={controlsHidden} $from='bottom' $room={Boolean(cueText)}>
+      <BottomBar $off={controlsHidden} $from='bottom'>
         <InfoRow>
           <TimePill>
             <span>
@@ -1950,6 +1968,23 @@ export default function GlassPlayer({
               {title && <em className='ttl'> • {title}</em>}
             </span>
           </TimePill>
+          <SeekWrap>
+            <Slider
+              label='Seek'
+              value={currentTime}
+              max={duration || 100}
+              step={0.1}
+              buffered={bufferedPct}
+              onChange={(v) => {
+                setScrubbing(true);
+                setCurrentTime(v);
+              }}
+              onCommit={(v) => {
+                if (videoRef.current) videoRef.current.currentTime = v;
+                setScrubbing(false);
+              }}
+            />
+          </SeekWrap>
           <FsBtn
             type='button'
             aria-label={fullscreen ? 'Exit fullscreen (f)' : 'Fullscreen (f)'}
@@ -1959,23 +1994,6 @@ export default function GlassPlayer({
             {fullscreen ? <FullscreenExitIcon /> : <FullscreenIcon />}
           </FsBtn>
         </InfoRow>
-        <SeekWrap>
-          <Slider
-            label='Seek'
-            value={currentTime}
-            max={duration || 100}
-            step={0.1}
-            buffered={bufferedPct}
-            onChange={(v) => {
-              setScrubbing(true);
-              setCurrentTime(v);
-            }}
-            onCommit={(v) => {
-              if (videoRef.current) videoRef.current.currentTime = v;
-              setScrubbing(false);
-            }}
-          />
-        </SeekWrap>
       </BottomBar>
 
       {/* settings menu */}
@@ -2023,15 +2041,6 @@ export default function GlassPlayer({
                   value={speed === 1 ? 'Normal' : `${speed}x`}
                   onClick={() => setMenuView('speed')}
                 />
-                {autoNextOption && (
-                  <Row
-                    icon={<SeekForward10Icon />}
-                    label='Auto next episode'
-                    value={autoNextOption.value ? 'On' : 'Off'}
-                    chevron={false}
-                    onClick={() => autoNextOption.onChange(!autoNextOption.value)}
-                  />
-                )}
               </>
             )}
 
